@@ -292,7 +292,8 @@ def main():
     10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
     """
     
-    test3 = """
+    medo_panico_terror_for_loop_test = """
+    10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
     : somatorio 0 1 do i + loop ;
     11 somatorio .
     """
@@ -300,7 +301,7 @@ def main():
     result_str = ""
     
     debug = False
-    result = parser.parse(test3, debug=debug)
+    result = parser.parse(medo_panico_terror_for_loop_test, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 
