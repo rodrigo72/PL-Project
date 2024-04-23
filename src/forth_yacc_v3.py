@@ -6,6 +6,8 @@ import pyperclip
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
+MAX_FOR_LOOPS = 10
+
 """
 RULES
 """
@@ -24,10 +26,7 @@ def p_All(p):
     """
     All : Elements
     """
-    start = [
-        "ALLOC 3",  # for loop parameters
-        "START"
-    ]
+    start = ['ALLOC 3'] * MAX_FOR_LOOPS + ['START']
     p[0] = start + p[1] + ["STOP"]
 
 
@@ -56,7 +55,6 @@ def p_Element(p):
             | ForLoop
             | Word
     """
-    # parser.global_pointer_state_stack.append(parser.global_pointer)
     p[0] = p[1]
     
     
@@ -73,8 +71,6 @@ def p_Word(p):
             stored_word = parser.words[label]
             if stored_word.type == StoredWordType.ARRAY:
                 p[0] = ['\tPUSHA ' + label, '\tCALL']
-            if stored_word.update_pointer:
-                stored_word.update_pointer()
             parser.used_words.add(label)
         else:
             raise Exception("Word not found in dictionary: " + p[1])
@@ -158,6 +154,7 @@ def p_WordBodyElement(p):
     WordBodyElement : Integer
                     | Arithmetic
                     | Float
+                    | ForLoop
                     | Word
     """
     p[0] = p[1]
@@ -168,17 +165,17 @@ def p_ForLoop(p):
     ForLoop : DO FLBody LOOP
     """
     
-    for_loop_number = len(parser.for_loops)
+    for_loop_number = MAX_FOR_LOOPS - parser.current_for_loop_idx
     for_loop_label = "FORLOOP" + str(for_loop_number)
     
     init = [
-        "\tPUSHG 0",
+        "\tPUSHG " + str(for_loop_number),
         "\tSWAP",
         "\tSTORE 0",
-        "\tPUSHG 0",
+        "\tPUSHG " + str(for_loop_number),
         "\tSWAP",
         "\tSTORE 1",
-        "\tPUSHG 0",
+        "\tPUSHG " + str(for_loop_number),
         "\tPUSHI 0",
         "\tSTORE 2",
         "\tPUSHA " + for_loop_label, 
@@ -186,36 +183,43 @@ def p_ForLoop(p):
     ]
     
     for_loop = [
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tLOAD 0',
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tLOAD 1',
         '\tINF',
         '\tJZ ' + 'ENDLOOP',
         
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tLOAD 0',
         '\tPUSHI 1',
         '\tADD',
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tSWAP',
         '\tSTORE 0',
         
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tLOAD 2',
         '\tPUSHI 1',
         '\tADD',
-        '\tPUSHG 0',
+        '\tPUSHG ' + str(for_loop_number),
         '\tSWAP',
         '\tSTORE 2',
     ]
     
     for index, value in enumerate(p[2]):
-        for_loop += [value]
+        if value == "I":
+            for_loop += [
+                '\tPUSHG ' + str(for_loop_number),
+                '\tLOAD 2',
+            ]
+        else:
+            for_loop += [value]
             
     for_loop += ['\tJUMP ' + for_loop_label]
     parser.for_loops[for_loop_label] = for_loop  
-        
+    parser.current_for_loop_idx -= 1
+    
     p[0] = init
     
 
@@ -245,8 +249,10 @@ def p_FLBodyElement(p):
     FLBodyElement : Arithmetic
                   | Integer
                   | Float
+                  | ForLoop
                   | Word
     """
+    
     p[0] = p[1]
     
 
@@ -263,16 +269,15 @@ parser = yacc.yacc()
 parser.exito = True
 parser.reserved_words = {
     "." : Word(StoredWordType.ARRAY, ["\tWRITEI"]),
-    "i" : Word(StoredWordType.ARRAY, [
-            "\tPUSHG 0",
-            "\tLOAD 2"
-        ]),
+    "i" : Word(StoredWordType.ARRAY, ["I"]),
+    "swap" : Word(StoredWordType.ARRAY, ["SWAP"]),
 }
 parser.used_words = set()
 parser.words = {}
 parser.for_loops = { "ENDLOOP": [] }
 parser.word_to_label = {}
 parser.next_word_label = "word0"
+parser.current_for_loop_idx = MAX_FOR_LOOPS
 
 
 def main():
@@ -280,17 +285,22 @@ def main():
     : test0 1 1 + ;
     : test 1 3 - test0 ;
     1 2 +
-    test
+    10 test
     """
     
     test2 = """
-    10 4 DO i . LOOP
+    10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
+    """
+    
+    test3 = """
+    : somatorio 0 1 do i + loop ;
+    11 somatorio .
     """
     
     result_str = ""
     
     debug = False
-    result = parser.parse(test2, debug=debug)
+    result = parser.parse(test3, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 

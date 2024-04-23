@@ -467,11 +467,12 @@ def run_tests():
     
     tests['random'].append(
         """
-        : test 3 0 DO 1 1 + LOOP ;
+        : somatorio 0 swap 1 do i + loop ;
+        11 somatorio .
         """
     )
     
-    test(tests, 'ifstatement')
+    test(tests, 'random')
     # test_all(tests)
 
 
