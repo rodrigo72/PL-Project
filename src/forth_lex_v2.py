@@ -98,7 +98,7 @@ def t_word_SEMICOLON(t):
 """
 FOR LOOP STATE
 """
-def t_word_DO(t):
+def t_ANY_DO(t):  # could be nested
     r'(do|DO)'
     t.lexer.push_state('forloop')
     return t
@@ -119,7 +119,7 @@ def t_forloop_PLUSLOOP(t):
 """
 WHILE LOOP STATE
 """
-def t_word_BEGIN(t):
+def t_ANY_BEGIN(t):
     r'(begin|BEGIN)'
     t.lexer.push_state('whileloop')
     t.lexer.while_counter = 0
@@ -156,7 +156,7 @@ def t_whileloop_AGAIN(t):
 """
 IF STATEMENT STATE
 """
-def t_word_ifstatement_IF(t):  # could be nested
+def t_ANY_ifstatement_IF(t):  # could be nested
     r'(if|IF)'
     t.lexer.push_state('ifstatement')
     t.lexer.else_counter = 0
@@ -184,17 +184,18 @@ COMMENT (BACKSLASH) STATE
 def t_ANY_BACKSLASH(t):
     r'\\'
     t.lexer.push_state('commentb')
-    return t
+    pass
 
 
 def t_commentb_COMMENT(t):
     r'[^\n]+'
-    return t
+    pass
 
 
 def t_commentb_NEWLINE(t):
     r'\n'
     t.lexer.pop_state()
+    pass
 
 
 """
@@ -203,18 +204,18 @@ COMMENT (PARENTHESES) STATE
 def t_ANY_LPAREN(t):
     r'\('
     t.lexer.push_state('commentp')
-    return t
+    pass
 
 
 def t_commentp_COMMENT(t):
     r'[^)\n]+'
-    return t
+    pass
 
 
 def t_commentp_RPAREN(t):
     r'\)'
     t.lexer.pop_state()
-    return t
+    pass
 
 
 """
@@ -300,7 +301,6 @@ def t_ANY_error(t):
 def t_ANY_newline(t):
     r'\n+'
     t.lexer.lineno += len(t.value)
-    print()
 
 
 """
@@ -376,16 +376,24 @@ def run_tests():
             0 swap 1 do
             i +
             loop ; 
+        10 3 do i . loop
         """
     ) # working 
     # (the Forth word 'i' copies the current loop index onto the parameter stack)
+    
+    tests['nested-forloop'].append(
+        """
+        : test 3 0 DO 1 1 + 3 0 DO . LOOP LOOP ;
+        """
+    ) 
     
     tests['forloopplus'].append(
         """
         : PENTAJUMPS  50 0 DO  I .  5 +LOOP ;
         : INC-COUNT  DO  I . DUP +LOOP  DROP ;
+        10 3 do i . 2 +loop
         """
-    )
+    ) # working
     
     tests['whileloop'].append(
         """
@@ -395,6 +403,7 @@ def run_tests():
         : loop-test ... AGAIN ;
         \ this should raise an error (multiple WHILE):
         \ : loop-test BEGIN ... flag WHILE ... flag WHILE ... REPEAT ; 
+        BEGIN 1 - dup dup . 0 = until
         """
     ) # working
     
@@ -411,6 +420,7 @@ def run_tests():
             else
             dup 1 - recurse *
             then ;
+        12 12 = IF ." It's full " THEN
         """
     ) # working
     
@@ -431,7 +441,7 @@ def run_tests():
         """
         : VEGETABLE  DUP 0<  SWAP 10 MOD 0= + IF  ." ARTICHOKE "  THEN ;
         """
-    )
+    ) # working
     
     tests['strings'].append(
         """
@@ -443,7 +453,7 @@ def run_tests():
         ;
         TESTKEY
         """
-    )
+    ) # working
     
     tests['variables'].append(
         """
@@ -453,10 +463,16 @@ def run_tests():
         111 constant cba 
         key .
         """
+    ) # working
+    
+    tests['random'].append(
+        """
+        : test 3 0 DO 1 1 + LOOP ;
+        """
     )
     
-    # test(tests, 'strings')
-    test_all(tests)
+    test(tests, 'ifstatement')
+    # test_all(tests)
 
 
 if __name__ == '__main__':
