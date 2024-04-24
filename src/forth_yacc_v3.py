@@ -6,7 +6,7 @@ import pyperclip
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
-MAX_FOR_LOOPS = 10
+MAX_FOR_LOOPS = 5
 
 """
 RULES
@@ -55,6 +55,7 @@ def p_Element(p):
             | ForLoop
             | Word
     """
+    parser.current_for_loop_idx = MAX_FOR_LOOPS
     p[0] = p[1]
     
     
@@ -159,6 +160,12 @@ def p_WordBodyElement(p):
     """
     p[0] = p[1]
     
+    
+def next_for_loop_label():
+    label = "FORLOOP" + str(parser.next_for_loop_idx)
+    parser.next_for_loop_idx += 1
+    return label
+
 
 def p_ForLoop(p):
     """
@@ -166,7 +173,7 @@ def p_ForLoop(p):
     """
     
     for_loop_number = MAX_FOR_LOOPS - parser.current_for_loop_idx
-    for_loop_label = "FORLOOP" + str(for_loop_number)
+    for_loop_label = next_for_loop_label()
     
     init = [
         "\tPUSHG " + str(for_loop_number),
@@ -252,7 +259,6 @@ def p_FLBodyElement(p):
                   | ForLoop
                   | Word
     """
-    
     p[0] = p[1]
     
 
@@ -278,6 +284,7 @@ parser.for_loops = { "ENDLOOP": [] }
 parser.word_to_label = {}
 parser.next_word_label = "word0"
 parser.current_for_loop_idx = MAX_FOR_LOOPS
+parser.next_for_loop_idx = 0
 
 
 def main():
@@ -290,18 +297,25 @@ def main():
     
     test2 = """
     10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
+    10 7 DO 7 . LOOP
+    """
+    
+    test3 = """
+    10 4 DO 1 . 4 0 DO 2 . LOOP LOOP
+    10 7 DO 7 . LOOP
     """
     
     medo_panico_terror_for_loop_test = """
     10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
-    : somatorio 0 1 do i + loop ;
-    11 somatorio .
     """
+    
+    # : somatorio swap 1 do i + loop ; <-- nao funciona por enquanto
+    # 11 somatorio .
     
     result_str = ""
     
     debug = False
-    result = parser.parse(medo_panico_terror_for_loop_test, debug=debug)
+    result = parser.parse(test2, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 
