@@ -1,7 +1,5 @@
 import pyperclip
-
-STACK_SIZE = 20
-GP = 4
+from utils import GP, STACK_SIZE
 
 
 def main():

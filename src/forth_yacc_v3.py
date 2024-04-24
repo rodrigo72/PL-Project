@@ -3,24 +3,14 @@ from forth_lex_v2 import tokens
 from enum import IntEnum
 from collections import deque
 import pyperclip
-from create_push_code import STACK_SIZE, GP
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
-MAX_NESTED_FOR_LOOPS = 4
+from utils import GP, STACK_SIZE, MAX_NESTED_FOR_LOOPS
 
 """
 RULES
 """
-
-class StoredWordType(IntEnum):
-    ARRAY = 0
-
-
-class Word:
-    def __init__(self, type, word):
-        self.type = type
-        self.word = word
 
 
 def p_All(p):
@@ -67,13 +57,11 @@ def p_Word(p):
     """
     
     if p[1] in parser.reserved_words:
-        p[0] = parser.reserved_words[p[1]].word
+        p[0] = parser.reserved_words[p[1]]
     else:
         label = parser.word_to_label.get(p[1], None)
         if label and label in parser.words:
-            stored_word = parser.words[label]
-            if stored_word.type == StoredWordType.ARRAY:
-                p[0] = ['\tPUSHA ' + label, '\tCALL']
+            p[0] = ['\tPUSHA ' + label, '\tCALL']
             parser.used_words.add(label)
         else:
             raise Exception("Word not found in dictionary: " + p[1])
@@ -128,7 +116,9 @@ def p_WordDefinition(p):
     if p[2] not in parser.reserved_words:
         word_label = get_next_word_label()
         parser.word_to_label[p[2]] = word_label
-        parser.words[word_label] = Word(StoredWordType.ARRAY, p[3])
+        temp = []
+        temp.extend(p[3])
+        parser.words[word_label] = temp
     else:
         raise Exception("Word already defined")
         
@@ -284,15 +274,15 @@ TESTING PARSER
 parser = yacc.yacc()
 parser.exito = True
 parser.reserved_words = {
-    "." : Word(StoredWordType.ARRAY, ["\tPUSHA MYPOP CALL", "\tWRITEI"]),
-    "i" : Word(StoredWordType.ARRAY, ["I"]),
-    "swap" : Word(StoredWordType.ARRAY, [
+    "." : ["\tPUSHA MYPOP CALL", "\tWRITEI"],
+    "i" : ["I"],
+    "swap" : [
         "\tPUSHA MYPOP CALL", 
         "\tPUSHA MYPOP CALL", 
         "\tSWAP", 
         "\tPUSHA MYPUSH CALL POP 1",
         "\tPUSHA MYPUSH CALL POP 1",
-        ]),
+        ],
 }
 parser.used_words = set()
 parser.words = {}
@@ -337,7 +327,13 @@ def main():
     
     test4 = """
     : my-loop 10 0 do i + loop ;
-    11 my-loop
+    11 my-loop .
+    """
+    
+    test5 = """
+    : sim2 2 + ;
+    : sim 1 + sim2 ;
+    1 sim .
     """
     
     debug = False
@@ -352,7 +348,7 @@ def main():
         
     for label in parser.used_words:
         result_str += label + ":\n"
-        for item in parser.words[label].word:
+        for item in parser.words[label]:
             result_str += item + "\n"
         result_str += "\tRETURN\n\n"
         
