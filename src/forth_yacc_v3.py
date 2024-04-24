@@ -3,10 +3,11 @@ from forth_lex_v2 import tokens
 from enum import IntEnum
 from collections import deque
 import pyperclip
+from create_push_code import STACK_SIZE, GP
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
-MAX_FOR_LOOPS = 5
+MAX_NESTED_FOR_LOOPS = 4
 
 """
 RULES
@@ -26,7 +27,8 @@ def p_All(p):
     """
     All : Elements
     """
-    start = ['ALLOC 3'] * MAX_FOR_LOOPS + ['START']
+    start = ['ALLOC 3'] * MAX_NESTED_FOR_LOOPS + ['ALLOC ' + str(STACK_SIZE + 1) + '\n'] + ['START']
+    start += ['\tPUSHG ' + str(GP) + ' PUSHI 1 STORE 0']
     p[0] = start + p[1] + ["STOP"]
 
 
@@ -55,7 +57,7 @@ def p_Element(p):
             | ForLoop
             | Word
     """
-    parser.current_for_loop_idx = MAX_FOR_LOOPS
+    parser.current_for_loop_idx = MAX_NESTED_FOR_LOOPS
     p[0] = p[1]
     
     
@@ -81,14 +83,14 @@ def p_Integer(p):
     """
     Integer : INTEGER
     """
-    p[0] = "\tPUSHI " + str(p[1])
+    p[0] = "\tPUSHI " + str(p[1]) + " PUSHA MYPUSH CALL POP 1"
     
 
 def p_Float(p):
     """
     Float : FLOAT
     """
-    p[0] = "\tPUSHF " + str(p[1])
+    p[0] = "\tPUSHF " + str(p[1]) +  "PUSHA MYPUSH CALL POP 1"
     
 
 def p_Arithmetic(p):
@@ -96,18 +98,22 @@ def p_Arithmetic(p):
     Arithmetic : ARITHMETIC
     """
     
+    temp = ""
+    
     if p[1] == "+":
-        p[0] = "\tADD"
+        temp = "\tADD"
     elif p[1] == "-":
-        p[0] = "\tSUB"
+        temp = "\tSUB"
     elif p[1] == "*":
-        p[0] = "\tMUL"
+        temp = "\tMUL"
     elif p[1] == "/":
-        p[0] = "\tDIV"
+        temp = "\tDIV"
     elif p[1] == "%":
-        p[0] = "\tMOD"
+        temp = "\tMOD"
     else: 
         raise Exception("Unknown arithmetic operator")
+    
+    p[0] = ["\tPUSHA MYPOP CALL", "\tPUSHA MYPOP CALL", "\tSWAP", temp, "\tPUSHA MYPUSH CALL POP 1"]
         
 
 def get_next_word_label():
@@ -126,7 +132,7 @@ def p_WordDefinition(p):
     else:
         raise Exception("Word already defined")
         
-    p[0] = ["\tNOP"]  # does nothing
+    p[0] = []  # does nothing
     
 
 def p_WordBody(p):
@@ -172,10 +178,13 @@ def p_ForLoop(p):
     ForLoop : DO FLBody LOOP
     """
     
-    for_loop_number = MAX_FOR_LOOPS - parser.current_for_loop_idx
+    for_loop_number = MAX_NESTED_FOR_LOOPS - parser.current_for_loop_idx
     for_loop_label = next_for_loop_label()
     
     init = [
+        "\tPUSHA MYPOP CALL",
+        "\tPUSHA MYPOP CALL",
+        "\tSWAP",
         "\tPUSHG " + str(for_loop_number),
         "\tSWAP",
         "\tSTORE 0",
@@ -218,7 +227,8 @@ def p_ForLoop(p):
         if value == "I":
             for_loop += [
                 '\tPUSHG ' + str(for_loop_number),
-                '\tLOAD 2',
+                '\tLOAD 0 PUSHI 1 SUB',
+                '\tPUSHA MYPUSH CALL POP 1',
             ]
         else:
             for_loop += [value]
@@ -274,16 +284,22 @@ TESTING PARSER
 parser = yacc.yacc()
 parser.exito = True
 parser.reserved_words = {
-    "." : Word(StoredWordType.ARRAY, ["\tWRITEI"]),
+    "." : Word(StoredWordType.ARRAY, ["\tPUSHA MYPOP CALL", "\tWRITEI"]),
     "i" : Word(StoredWordType.ARRAY, ["I"]),
-    "swap" : Word(StoredWordType.ARRAY, ["SWAP"]),
+    "swap" : Word(StoredWordType.ARRAY, [
+        "\tPUSHA MYPOP CALL", 
+        "\tPUSHA MYPOP CALL", 
+        "\tSWAP", 
+        "\tPUSHA MYPUSH CALL POP 1",
+        "\tPUSHA MYPUSH CALL POP 1",
+        ]),
 }
 parser.used_words = set()
 parser.words = {}
 parser.for_loops = { "ENDLOOP": [] }
 parser.word_to_label = {}
 parser.next_word_label = "word0"
-parser.current_for_loop_idx = MAX_FOR_LOOPS
+parser.current_for_loop_idx = MAX_NESTED_FOR_LOOPS
 parser.next_for_loop_idx = 0
 
 
@@ -296,7 +312,7 @@ def main():
     """
     
     test2 = """
-    10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
+    10 7 DO 1 . 3 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
     10 7 DO 7 . LOOP
     """
     
@@ -306,7 +322,7 @@ def main():
     """
     
     medo_panico_terror_for_loop_test = """
-    10 4 DO 1 . 4 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
+    2 0 DO 1 . 2 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
     """
     
     # : somatorio swap 1 do i + loop ; <-- nao funciona por enquanto
@@ -314,8 +330,18 @@ def main():
     
     result_str = ""
     
+    test_somatorio = """
+    : somatorio 0 swap 1 do i + loop ;
+    11 somatorio .
+    """
+    
+    test4 = """
+    : my-loop 10 0 do i + loop ;
+    11 my-loop
+    """
+    
     debug = False
-    result = parser.parse(test2, debug=debug)
+    result = parser.parse(medo_panico_terror_for_loop_test, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 
@@ -340,6 +366,11 @@ def main():
         
         
     print(result_str)
+    
+    with open("vm_stack_code.txt", "r") as file:
+        contents = file.read()
+    
+    result_str += '\n' + contents
     pyperclip.copy(result_str)
         
     print("-----------------------------------------\n")
