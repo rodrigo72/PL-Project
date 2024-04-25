@@ -251,7 +251,7 @@ def t_ANY_COMPARISON(t):
 
 
 def t_ANY_STRING(t):
-    r'(?P<type>.){1}\" (?P<string>.+?)\"'
+    r'(?P<type>.){1}\"\s(?P<string>.+?)\"'
     t.value = (t.lexer.lexmatch.group('type'), t.lexer.lexmatch.group('string'))
     return t
 
@@ -471,7 +471,7 @@ def run_tests():
         """
     )
     
-    test(tests, 'random')
+    test(tests, 'strings')
     # test_all(tests)
 
 

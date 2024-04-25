@@ -4,6 +4,7 @@ from enum import IntEnum
 from collections import deque
 import sys
 from utils import GP, STACK_SIZE, MAX_NESTED_FOR_LOOPS
+import pyperclip
 
 DEBUG = False
 
@@ -573,9 +574,10 @@ def main():
         contents = file.read()
     
     result_str += '\n' + contents
+    pyperclip.copy(result_str)
     
-    print(result_str)
-            
+    with open("output.txt", "w") as file:
+        file.write(result_str)
 
 if __name__ == '__main__':
     main()

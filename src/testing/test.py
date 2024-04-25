@@ -3,58 +3,89 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import time
 
-import xml.etree.ElementTree as ET
 import subprocess
+import yaml
 
-COMPILE_TIMEOUT = 3
-PAGE_LOAD_TIMEOUT = 1
+COMPILE_TIMEOUT = 2
+
+chrome_options = Options()
+prefs = {"profile.managed_default_content_settings.images": 2,
+         "profile.default_content_settings.cookies": 2}
+chrome_options.add_experimental_option("prefs", prefs)
+chrome_options.add_argument("--headless")
+driver = webdriver.Chrome(options=chrome_options)
+driver.get('https://ewvm.epl.di.uminho.pt/run')
 
 
-def get_result(code):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    driver = webdriver.Chrome(options=chrome_options)
-    driver.get('https://ewvm.epl.di.uminho.pt/run')
-
-    time.sleep(PAGE_LOAD_TIMEOUT)
+def get_result(code: str) -> str:
     textarea = driver.find_elements(By.NAME, "code")[0]
+    textarea.clear()
     textarea.send_keys(code)
-
+    
     run_input = driver.find_element(By.XPATH, "/html/body/div/div[1]/div[1]/form/div[2]/div[2]/input[2]")
     run_input.click()
     time.sleep(COMPILE_TIMEOUT)
-    result = driver.find_elements(By.XPATH, '/html/body/div/div[1]/div[2]/form/div/div/span')[0].text
-    
-    driver.quit()
-    return result
+        
+    result = driver.find_elements(By.XPATH, '/html/body/div/div[1]/div[2]/form/div/div/span')
+    result_str = ''.join([r.text if r.text != "" else '\n' for r in result])
+        
+    return result_str
 
 
-def main():
-    tree = ET.parse("tests.xml")
-    root = tree.getroot()
-    
-    tests = []
-    for test in root.findall('test'):
-        tests.append({
-            "name": test.find("name").text.strip(),
-            "input": test.find("input").text.strip(),
-            "output": test.find("output").text.strip(),
-            "result": None
-        })  
+def test(tests, test_name=None, show_input=False):
+    print()
     
     for test in tests:
-        forth_yacc = subprocess.run(["python3", "forth_yacc.py", test['input']], capture_output=True, text=True, cwd="../")
-        ewvm_code = forth_yacc.stdout.strip()
+        if not test['test']: 
+            continue
+        
+        if test_name is not None and test_name != test['name']:
+            continue
+        
+        print(f"> {test['name']} : START")
+        
+        subprocess.run(["python3", "forth_yacc.py", test['input']], cwd="../", check=True)
+        with open("../output.txt", "r") as output_file:
+            ewvm_code = output_file.read()
         result = get_result(ewvm_code)
         test['result'] = result
+        print(f"> {test['name']} : DONE")
+        
+    print('\n')
         
     for test in tests:
-        print(f"Test: {test['name']}")
-        print(f"Expected: {test['output']}")
-        print(f"Result: {test['result']}")
-        print()
-        assert test['output'].strip() == test['result'].strip()
+        if not test['test']: 
+            continue
+        
+        if test_name is not None and test_name != test['name']:
+            continue
+        
+        print('\t-----------------------------')
+        print(f"\tTest: {test['name']}\n")
+        if show_input:
+            input_str = '\t' + test['input'].strip().replace('\n', '\n\t')
+            print(f"\t::Input::\n{input_str}\n")
+        
+        output_str = '\n\t' + str(test['output']).strip().replace('\n', '\n\t')
+        print(f"\t::Expected:: {output_str}\n")
+        
+        result_str = '\n\t' + str(test['result']).strip().replace('\n', '\n\t')
+        print(f"\t::Result:: {result_str}")
+        
+        print(f"\t{'----------SUCCEEDED----------' if str(test['output']).strip() == str(test['result']).strip() else '------------FAILED------------'}")
+        print('\n')
+        
+
+def main():
+    with open("tests.yaml", "r") as f:
+        yaml_data = yaml.safe_load(f)
+
+    tests = yaml_data['tests']
+    test(tests, test_name="Strings 1", show_input=True)
+    # test(tests, show_input=True)
     
+    driver.quit()
+
 
 if __name__ == '__main__':
     main()
