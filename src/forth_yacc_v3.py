@@ -408,7 +408,7 @@ parser.reserved_words = {
         "\tPUSHA DECPOINTER CALL",
     ],
     "depth": [
-        "\tPUSHG 4 LOAD 0",
+        f"\tPUSHG {GP} LOAD 0",
         "\tPUSHI 1",
         "\tSUB",
         "\tPUSHA MYPUSH CALL POP 1"
