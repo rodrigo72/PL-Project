@@ -1,17 +1,17 @@
 import ply.yacc as yacc
-from forth_lex_v2 import tokens
+from forth_lex import tokens
 from enum import IntEnum
 from collections import deque
-import pyperclip
+import sys
+from utils import GP, STACK_SIZE, MAX_NESTED_FOR_LOOPS
+
+DEBUG = False
 
 # VM : https://ewvm.epl.di.uminho.pt/
-
-from utils import GP, STACK_SIZE, MAX_NESTED_FOR_LOOPS
 
 """
 RULES
 """
-
 
 def p_All(p):
     """
@@ -425,7 +425,14 @@ parser.if_statement_idx = 0
 
 
 def main():
-    test = """
+    
+    if len(sys.argv) < 2:
+        print("Usage: python3 forth_yacc.py <code>")
+        sys.exit(1)
+        
+    test = sys.argv[1]
+    
+    test1 = """
     : test0 1 1 + ;
     : test 1 3 - test0 ;
     1 2 +
@@ -535,10 +542,7 @@ def main():
     2 11 3 4 45 8 19 maiorN .
     """  # works, nice
     
-    debug = False
-    result = parser.parse(depth_test2, debug=debug)
-    
-    print("\n-------------- EWVM code --------------\n")
+    result = parser.parse(test, debug=DEBUG)
 
     for item in result:
         result_str += item + "\n"
@@ -564,17 +568,14 @@ def main():
         for item in if_body:
             result_str += item + "\n"
         result_str += "\tRETURN\n\n"
-        
-    print(result_str)
-    
+            
     with open("vm_stack_code.txt", "r") as file:
         contents = file.read()
     
     result_str += '\n' + contents
-    pyperclip.copy(result_str)
-        
-    print("-----------------------------------------\n")
     
+    print(result_str)
+            
 
 if __name__ == '__main__':
     main()
