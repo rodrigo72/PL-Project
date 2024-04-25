@@ -263,7 +263,7 @@ def t_ANY_VARIABLE(t):
 
 
 def t_ANY_GET(t):
-    r'\?'
+    r'(\B|^)\?(\B|$)'
     return t
 
 
@@ -467,8 +467,8 @@ def run_tests():
     
     tests['random'].append(
         """
-        : somatorio 0 swap 1 do i + loop ;
-        11 somatorio .
+        : ?FULL  12 = IF  ." It's full "  THEN ;
+        : ?DAY  32 < IF  ." Looks good " ELSE  ." no way " THEN ;
         """
     )
     

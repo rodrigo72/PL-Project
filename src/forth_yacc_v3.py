@@ -41,9 +41,12 @@ def p_Elements(p):
 def p_Element(p):
     """
     Element : WordDefinition
+            | String
             | Arithmetic
+            | Comparison
             | Integer
             | Float
+            | IfStatement
             | ForLoop
             | Word
     """
@@ -51,18 +54,28 @@ def p_Element(p):
     p[0] = p[1]
     
     
+def p_String(p):
+    """
+    String : STRING
+    """
+    if p[1][0] == '.':
+        p[0] = "\tPUSHS \"" + p[1][1] + "\" WRITES"
+    elif p[1][0] == 'c':
+        pass
+    
+    
 def p_Word(p):
     """
     Word : WORD
     """
     
-    if p[1] in parser.reserved_words:
-        p[0] = parser.reserved_words[p[1]]
+    p1_to_lower = p[1].lower()
+    if p1_to_lower in parser.reserved_words:
+        p[0] = parser.reserved_words[p1_to_lower]
     else:
-        label = parser.word_to_label.get(p[1], None)
+        label = parser.word_to_label.get(p1_to_lower, None)
         if label and label in parser.words:
             p[0] = ['\tPUSHA ' + label, '\tCALL']
-            parser.used_words.add(label)
         else:
             raise Exception("Word not found in dictionary: " + p[1])
     
@@ -104,8 +117,31 @@ def p_Arithmetic(p):
     p[0] = ["\tPUSHA MYPOP CALL", "\tPUSHA MYPOP CALL", "\tSWAP", temp, "\tPUSHA MYPUSH CALL POP 1"]
         
 
+def p_Comparison(p):
+    """
+    Comparison : COMPARISON
+    """
+    
+    temp = ""
+    
+    if p[1] == "<":
+        temp = "\tINF"
+    elif p[1] == ">":
+        temp = "\tSUP"
+    elif p[1] == "<=":
+        temp = "\tINFEQ"
+    elif p[1] == ">=":
+        temp = "\tSUPEQ"
+    elif p[1] == "=":
+        temp = "\tEQUAL"
+    else:
+        raise Exception("Unknown comparison operator")
+    
+    p[0] = ["\tPUSHA MYPOP CALL", "\tPUSHA MYPOP CALL", "\tSWAP", temp, "\tPUSHA MYPUSH CALL POP 1"]
+
+
 def get_next_word_label():
-    parser.next_word_label = "word" + str(len(parser.used_words))
+    parser.next_word_label = "word" + str(len(parser.words))
     return parser.next_word_label
 
 
@@ -113,9 +149,10 @@ def p_WordDefinition(p):
     """
     WordDefinition : COLON WORD WordBody SEMICOLON
     """
-    if p[2] not in parser.reserved_words:
+    p2_to_lower = p[2].lower()
+    if p2_to_lower not in parser.reserved_words:
         word_label = get_next_word_label()
-        parser.word_to_label[p[2]] = word_label
+        parser.word_to_label[p2_to_lower] = word_label
         temp = []
         temp.extend(p[3])
         parser.words[word_label] = temp
@@ -149,8 +186,11 @@ def p_WordBodyElements(p):
 def p_WordBodyElement(p):
     """
     WordBodyElement : Integer
+                    | String
                     | Arithmetic
+                    | Comparison
                     | Float
+                    | IfStatement
                     | ForLoop
                     | Word
     """
@@ -254,8 +294,70 @@ def p_FLBodyElements(p):
 def p_FLBodyElement(p):
     """
     FLBodyElement : Arithmetic
+                  | String
+                  | Comparison
                   | Integer
                   | Float
+                  | IfStatement
+                  | ForLoop
+                  | Word
+    """
+    p[0] = p[1]
+    
+
+  
+def next_if_statement_label():
+    label = "IFSTATEMENT" + str(parser.if_statement_idx)
+    parser.if_statement_idx += 1
+    return label
+
+
+def p_IfStatement(p):
+    """
+    IfStatement : IF ISBody THEN
+                | IF ISBody ELSE ISBody THEN
+    """
+    if len(p) == 4:
+        label = next_if_statement_label()
+        p[0] = ["\tPUSHA " + label + " CALL"]
+        parser.if_statements[label] = ["\tPUSHA MYPOP CALL", "\tJZ EMPTYELSE"] + p[2]
+    else:
+        label1 = next_if_statement_label()
+        p[0] = ["\tPUSHA " + label1 + " CALL"]
+        label2 = next_if_statement_label()
+        parser.if_statements[label1] = ["\tPUSHA MYPOP CALL", "\tJZ " + label2] + p[2]
+        parser.if_statements[label2] = p[4]
+
+
+def p_ISBody(p):
+    """
+    ISBody : ISBodyElements
+    """
+    p[0] = p[1]
+    
+
+def p_ISBodyElements(p):
+    """
+    ISBodyElements : ISBodyElements ISBodyElement
+                   | 
+    """
+    if len(p) == 1:
+        p[0] = []
+    else:
+        if type(p[2]) == list:
+            p[0] = p[1] + p[2]
+        else:
+            p[0] = p[1] + [p[2]]
+            
+
+def p_ISBodyElement(p):
+    """
+    ISBodyElement : Integer
+                  | String
+                  | Float
+                  | Arithmetic
+                  | Comparison
+                  | IfStatement
                   | ForLoop
                   | Word
     """
@@ -283,14 +385,29 @@ parser.reserved_words = {
         "\tPUSHA MYPUSH CALL POP 1",
         "\tPUSHA MYPUSH CALL POP 1",
         ],
+    "cr" : ["\tWRITELN"],
+    "emit" : [
+        "\tPUSHA MYPOP CALL",
+        "\tWRITECHR",
+    ],
+    "dup": [
+        "\tPUSHA MYPOP CALL",
+        "\tDUP 1",
+        "\tPUSHA MYPUSH CALL POP 1",
+        "\tPUSHA MYPUSH CALL POP 1"
+    ],
+    "drop": [
+        "\tPUSHA DECPOINTER CALL",
+    ],
 }
-parser.used_words = set()
 parser.words = {}
 parser.for_loops = { "ENDLOOP": [] }
 parser.word_to_label = {}
 parser.next_word_label = "word0"
 parser.current_for_loop_idx = MAX_NESTED_FOR_LOOPS
 parser.next_for_loop_idx = 0
+parser.if_statements = { "EMPTYELSE": [] }
+parser.if_statement_idx = 0
 
 
 def main():
@@ -315,9 +432,6 @@ def main():
     2 0 DO 1 . 2 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
     """
     
-    # : somatorio swap 1 do i + loop ; <-- nao funciona por enquanto
-    # 11 somatorio .
-    
     result_str = ""
     
     test_somatorio = """
@@ -336,8 +450,53 @@ def main():
     1 sim .
     """
     
+    test_string = """
+    ." hello my friend"
+    cr
+    ." hello again"
+    cr 97 emit
+    """
+    
+    test_string_2 = """
+    : tofu ." Yummy bean curd!" ;
+    : sprouts ." Miniature vegetables." ;
+    : menu CR tofu CR sprouts CR ;
+    menu
+    """
+    
+    test_ifstatement = """
+    : ?FULL 12 = IF 391 .  THEN ;
+    12 ?FULL
+    """
+    
+    test_comparisons = """
+    1 2 < .
+    2 3 = .
+    """
+    
+    test_ifelse = """
+    : ?DAY  32 < IF  ." Looks good " ELSE  ." no way " THEN ;
+    33 ?DAY
+    """
+    
+    test_nested_ifelse = """
+    : EGGSIZE ( n -- )
+            DUP 18 < IF  ." reject "      ELSE
+            DUP 21 < IF  ." small "       ELSE
+            DUP 24 < IF  ." medium "      ELSE
+            DUP 27 < IF  ." large "       ELSE
+            DUP 30 < IF  ." extra large " ELSE
+                ." error "
+            THEN THEN THEN THEN THEN DROP ;
+    23 EGGSIZE
+    """
+    
+    dup_test = """
+    1 dup . .
+    """
+    
     debug = False
-    result = parser.parse(medo_panico_terror_for_loop_test, debug=debug)
+    result = parser.parse(test_string_2, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 
@@ -346,9 +505,9 @@ def main():
     
     result_str += "\n"
         
-    for label in parser.used_words:
-        result_str += label + ":\n"
-        for item in parser.words[label]:
+    for word_label, word in parser.words.items():
+        result_str += word_label + ":\n"
+        for item in word:
             result_str += item + "\n"
         result_str += "\tRETURN\n\n"
         
@@ -359,7 +518,12 @@ def main():
         for item in for_loop:
             result_str += item + "\n"
         result_str += "\tRETURN\n\n"
-        
+    
+    for if_label, if_body in parser.if_statements.items():
+        result_str += if_label + ":\n"
+        for item in if_body:
+            result_str += item + "\n"
+        result_str += "\tRETURN\n\n"
         
     print(result_str)
     
