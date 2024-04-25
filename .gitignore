@@ -161,3 +161,4 @@ cython_debug/
 
 src/*.out
 src/parsetab.py
+src/output.txt
