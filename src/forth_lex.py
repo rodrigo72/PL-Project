@@ -47,6 +47,7 @@ tokens = (
     
     # other
     'STRING',
+    'CHAR',
     
     # variables
     'VARIABLE',  # declare a variable : 'variable'
@@ -249,6 +250,14 @@ def t_ANY_COMPARISON(t):
     r'(<=|>=|<>|=|<|>|AND|and|OR|or|\?DUP|\?dup)'
     return t
 
+def t_ANY_CHAR(t):
+    r'(char|CHAR)\s+(?P<char>\S+)?'
+    value = t.lexer.lexmatch.group('char')
+    if not value or len(value) == 0:
+        t.value = ""
+    else:
+        t.value = value[0]
+    return t
 
 def t_ANY_STRING(t):
     r'(?P<type>.){1}\"\s(?P<string>.+?)\"'
@@ -465,13 +474,24 @@ def run_tests():
         """
     ) # working
     
+    tests['char'].append(
+        """
+        CHAR W .
+        CHAR % DUP . EMIT
+        CHAR A DUP .
+        32 + EMIT
+        CHAR AAAAAA
+        97 EMIT
+        """
+    )
+    
     tests['random'].append(
         """
         1 2 2dup . . . .
         """
     )
     
-    test(tests, 'strings')
+    test(tests, 'char')
     # test_all(tests)
 
 

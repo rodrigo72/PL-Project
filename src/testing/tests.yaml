@@ -130,3 +130,41 @@ tests:
       testing
     output: 79
     test: true
+
+  
+  - name: char 1
+    input: |
+      CHAR W .
+      CHAR % DUP . EMIT
+      CHAR A DUP .
+      32 + EMIT
+    output: "8737%65a"
+    test: true
+
+
+  - name: spaces
+    input: |
+      : STAR 42 EMIT ;
+      : STARS 0 DO STAR LOOP ;
+      : MARGIN CR 30 SPACES ;
+      : BLIP MARGIN STAR ;
+      : IOI MARGIN STAR 3 SPACES STAR ;
+      : IIO MARGIN STAR STAR 3 SPACES ;
+      : OIO MARGIN 2 SPACES STAR 2 SPACES ;
+      : BAR MARGIN 5 STARS ;
+      : F BAR BLIP BAR BLIP BLIP CR ;
+      F
+    output: |
+        *****
+        *
+        *****
+        *
+        *
+    test: false
+
+  
+  - name: spaces 2
+    input: |
+      1 . 10 spaces 1 .
+    output: "1          1"
+    test: true

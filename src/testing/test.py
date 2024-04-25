@@ -93,7 +93,7 @@ def main():
         yaml_data = yaml.safe_load(f)
 
     tests = yaml_data['tests']
-    # test(tests, test_name="Nested for loop 2", show_input=True)
+    # test(tests, test_name="spaces 2", show_input=True)
     test(tests, show_input=True)
     
     driver.quit()

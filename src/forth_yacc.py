@@ -50,6 +50,7 @@ def p_Elements(p):
 def p_Element(p):
     """
     Element : WordDefinition
+            | Char
             | String
             | Arithmetic
             | Comparison
@@ -62,6 +63,13 @@ def p_Element(p):
     """
     p[0] = p[1]
     
+
+def p_Char(p):
+    """
+    Char : CHAR
+    """
+    p[0] = ["\tPUSHS \"" + str(p[1]) + "\" CHRCODE", "\tPUSHA MYPUSH CALL POP 1"]
+
 
 def p_String(p):
     """
@@ -195,6 +203,7 @@ def p_WordBodyElements(p):
 def p_BodyElement(p):
     """
     BodyElement : Integer
+                | Char
                 | String
                 | Arithmetic
                 | Comparison
@@ -457,6 +466,27 @@ parser.reserved_words = {
         "\tPUSHI 1",
         "\tSUB",
         "\tPUSHA MYPUSH CALL POP 1"
+    ],
+    "spaces": [
+        "\tPUSHA SPACES CALL"
+    ]
+}
+parser.auxiliary_labels = {
+    "SPACES": [
+        "\tPUSHA MYPOP CALL",
+        "\tJUMP SPACES2",
+    ],
+    "SPACES2": [
+        "\tPUSHI 32",
+        "\tWRITECHR",
+        "\tPUSHI 1",
+        "\tSUB",
+        "\tDUP 1",
+        "\tPUSHI 0",
+        "\tEQUAL",
+        "\tJZ SPACES2",
+        "\tPOP 1",
+        "\tRETURN"
     ]
 }
 parser.words = {}
@@ -495,7 +525,7 @@ def main():
     
     result_str += "\n"
 
-    dicts = [parser.words, parser.for_loops, parser.if_statements, parser.while_loops]
+    dicts = [parser.words, parser.for_loops, parser.if_statements, parser.while_loops, parser.auxiliary_labels]
     for d in dicts:
         result_str += dict_to_str(d)
             
