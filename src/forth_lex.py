@@ -241,7 +241,7 @@ def t_ANY_INTEGER(t):
 
 
 def t_ANY_ARITHMETIC(t):
-    r'(\+|\-|\*|\/|\%|\^)'
+    r'(\+|\-|\*|\/|\%|\^|MOD|mod)'
     return t
 
 

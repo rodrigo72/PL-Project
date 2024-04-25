@@ -97,3 +97,26 @@ tests:
       2 11 3 4 45 8 19 maiorN .
     output: 45
     test: true
+
+  - name: rectangle
+    input: |
+      : RECTANGLE 25 0 DO I 5 MOD 0 = IF  CR  THEN ." *" LOOP ;
+      RECTANGLE
+    output: |
+      *****
+      *****
+      *****
+      *****
+      *****
+    test: true
+
+  - name: Nested for loop 2
+    input: |
+      : A  CR 4 1 DO  DUP I * .  LOOP  DROP ;
+      : B  CR 4 1 DO  I A  LOOP ;
+      B
+    output: |
+      123
+      246
+      369
+    test: true

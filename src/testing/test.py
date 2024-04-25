@@ -53,6 +53,8 @@ def test(tests, test_name=None, show_input=False):
         
     print('\n')
         
+    succeded = 0
+    failed = 0
     for test in tests:
         if not test['test']: 
             continue
@@ -61,7 +63,8 @@ def test(tests, test_name=None, show_input=False):
             continue
         
         print('\t-----------------------------')
-        print(f"\tTest: {test['name']}\n")
+        print(f"\t{test['name']}\n")
+        
         if show_input:
             input_str = '\t' + test['input'].strip().replace('\n', '\n\t')
             print(f"\t::Input::\n{input_str}\n")
@@ -72,8 +75,17 @@ def test(tests, test_name=None, show_input=False):
         result_str = '\n\t' + str(test['result']).strip().replace('\n', '\n\t')
         print(f"\t::Result:: {result_str}")
         
-        print(f"\t{'----------SUCCEEDED----------' if str(test['output']).strip() == str(test['result']).strip() else '------------FAILED------------'}")
+        if str(test['output']).strip() == str(test['result']).strip():
+            succeded += 1
+            print("\t----------SUCCEEDED----------")
+        else:
+            failed += 1
+            print(f"\t------------FAILED------------")
         print('\n')
+        
+    print()
+    print(f"Succeded: {succeded}")
+    print(f"Failed: {failed}")
         
 
 def main():
@@ -81,8 +93,8 @@ def main():
         yaml_data = yaml.safe_load(f)
 
     tests = yaml_data['tests']
-    test(tests, test_name="Strings 1", show_input=True)
-    # test(tests, show_input=True)
+    # test(tests, test_name="Nested for loop 2", show_input=True)
+    test(tests, show_input=True)
     
     driver.quit()
 

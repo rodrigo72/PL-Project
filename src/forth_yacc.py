@@ -3,7 +3,7 @@ from forth_lex import tokens
 from enum import IntEnum
 from collections import deque
 import sys
-from utils import GP, STACK_SIZE, MAX_NESTED_FOR_LOOPS
+from utils import GP, STACK_SIZE
 import pyperclip
 
 DEBUG = False
@@ -18,8 +18,16 @@ def p_All(p):
     """
     All : Elements
     """
-    start = ['ALLOC 3'] * MAX_NESTED_FOR_LOOPS + ['ALLOC ' + str(STACK_SIZE + 1) + '\n'] + ['START']
+    
+    init_loop_parameters = [
+        "\tPUSHG 0 PUSHI 0 STORE 0",
+        "\tPUSHG 0 PUSHI 0 STORE 1",
+        "\tPUSHG 0 PUSHI 0 STORE 2"
+    ]
+    
+    start = ['ALLOC 3'] + ['ALLOC ' + str(STACK_SIZE + 1) + '\n'] + ['START']
     start += ['\tPUSHG ' + str(GP) + ' PUSHI 1 STORE 0']
+    start += init_loop_parameters
     p[0] = start + p[1] + ["STOP"]
 
 
@@ -51,7 +59,6 @@ def p_Element(p):
             | ForLoop
             | Word
     """
-    parser.current_for_loop_idx = MAX_NESTED_FOR_LOOPS
     p[0] = p[1]
     
     
@@ -110,7 +117,7 @@ def p_Arithmetic(p):
         temp = "\tMUL"
     elif p[1] == "/":
         temp = "\tDIV"
-    elif p[1] == "%":
+    elif p[1] == "%" or p[1] == "MOD" or p[1] == "mod":
         temp = "\tMOD"
     else: 
         raise Exception("Unknown arithmetic operator")
@@ -209,47 +216,74 @@ def p_ForLoop(p):
     ForLoop : DO FLBody LOOP
     """
     
-    for_loop_number = MAX_NESTED_FOR_LOOPS - parser.current_for_loop_idx
     for_loop_label = next_for_loop_label()
     
     init = [
+        # load struct values
+        "\tPUSHG 0",
+        "\tLOAD 0",
+        "\tPUSHG 0",
+        "\tLOAD 1",
+        "\tPUSHG 0",
+        "\tLOAD 2",
+        
+        # pop idx and limit
         "\tPUSHA MYPOP CALL",
         "\tPUSHA MYPOP CALL",
         "\tSWAP",
-        "\tPUSHG " + str(for_loop_number),
+        
+        #  store idx
+        "\tPUSHG 0",
         "\tSWAP",
         "\tSTORE 0",
-        "\tPUSHG " + str(for_loop_number),
+        
+        # store limit
+        "\tPUSHG 0",
         "\tSWAP",
         "\tSTORE 1",
-        "\tPUSHG " + str(for_loop_number),
+        
+        # iteration
+        "\tPUSHG 0",
         "\tPUSHI 0",
         "\tSTORE 2",
+        
+        # call loop
         "\tPUSHA " + for_loop_label, 
         "\tCALL", 
+        
+        # restore struct values
+        "PUSHG 0",
+        "SWAP",
+        "STORE 2",
+        "PUSHG 0",
+        "SWAP",
+        "STORE 1",
+        "PUSHG 0",
+        "SWAP",
+        "STORE 0",
     ]
     
     for_loop = [
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tLOAD 0',
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tLOAD 1',
         '\tINF',
         '\tJZ ' + 'ENDLOOP',
         
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tLOAD 0',
         '\tPUSHI 1',
         '\tADD',
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tSWAP',
         '\tSTORE 0',
         
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tLOAD 2',
         '\tPUSHI 1',
         '\tADD',
-        '\tPUSHG ' + str(for_loop_number),
+        '\tPUSHG 0',
         '\tSWAP',
         '\tSTORE 2',
     ]
@@ -257,7 +291,7 @@ def p_ForLoop(p):
     for index, value in enumerate(p[2]):
         if value == "I":
             for_loop += [
-                '\tPUSHG ' + str(for_loop_number),
+                '\tPUSHG 0',
                 '\tLOAD 0 PUSHI 1 SUB',
                 '\tPUSHA MYPUSH CALL POP 1',
             ]
@@ -266,7 +300,6 @@ def p_ForLoop(p):
             
     for_loop += ['\tJUMP ' + for_loop_label]
     parser.for_loops[for_loop_label] = for_loop  
-    parser.current_for_loop_idx -= 1
     
     p[0] = init
     
@@ -419,7 +452,6 @@ parser.words = {}
 parser.for_loops = { "ENDLOOP": [] }
 parser.word_to_label = {}
 parser.next_word_label = "word0"
-parser.current_for_loop_idx = MAX_NESTED_FOR_LOOPS
 parser.next_for_loop_idx = 0
 parser.if_statements = { "EMPTYELSE": [] }
 parser.if_statement_idx = 0
@@ -431,120 +463,11 @@ def main():
         print("Usage: python3 forth_yacc.py <code>")
         sys.exit(1)
         
-    test = sys.argv[1]
-    
-    test1 = """
-    : test0 1 1 + ;
-    : test 1 3 - test0 ;
-    1 2 +
-    10 test
-    """
-    
-    test2 = """
-    10 7 DO 1 . 3 0 DO 2 . 2 0 DO 3 . LOOP LOOP LOOP
-    10 7 DO 7 . LOOP
-    """
-    
-    test3 = """
-    10 4 DO 1 . 4 0 DO 2 . LOOP LOOP
-    10 7 DO 7 . LOOP
-    """
-    
-    medo_panico_terror_for_loop_test = """
-    2 0 DO 1 . 2 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP
-    """
-    
-    result_str = ""
-    
-    test_somatorio = """
-    : somatorio 0 swap 1 do i + loop ;
-    11 somatorio .
-    """
-    
-    test4 = """
-    : my-loop 10 0 do i + loop ;
-    11 my-loop .
-    """
-    
-    test5 = """
-    : sim2 2 + ;
-    : sim 1 + sim2 ;
-    1 sim .
-    """
-    
-    test_string = """
-    ." hello my friend"
-    cr
-    ." hello again"
-    cr 97 emit
-    """
-    
-    test_string_2 = """
-    : tofu ." Yummy bean curd!" ;
-    : sprouts ." Miniature vegetables." ;
-    : menu CR tofu CR sprouts CR ;
-    menu
-    """
-    
-    test_ifstatement = """
-    : ?FULL 12 = IF 391 .  THEN ;
-    12 ?FULL
-    """
-    
-    test_comparisons = """
-    1 2 < .
-    2 3 = .
-    """
-    
-    test_ifelse = """
-    : ?DAY  32 < IF  ." Looks good " ELSE  ." no way " THEN ;
-    33 ?DAY
-    """
-    
-    test_nested_ifelse = """
-    : EGGSIZE ( n -- )
-            DUP 18 < IF  ." reject "      ELSE
-            DUP 21 < IF  ." small "       ELSE
-            DUP 24 < IF  ." medium "      ELSE
-            DUP 27 < IF  ." large "       ELSE
-            DUP 30 < IF  ." extra large " ELSE
-                ." error "
-            THEN THEN THEN THEN THEN DROP ;
-    23 EGGSIZE
-    """
-    
-    dup_test = """
-    1 dup . .
-    """
-    
-    dup2_test = """
-    1 2 2dup . . . .
-    """
-    
-    dup2_test2 = """
-    : maior2 2dup > if swap . ." é o maior " else . ." é o maior " then ;
-    77 156 maior2
-    """
-    
-    dup2_test3 = """
-    : maior2 2dup > if swap then ;
-    : maior3 maior2 maior2 . ;
-    2 11 3 maior3
-    """
-    
-    depth_test1 = """
-    1 1 1 depth .
-    """
-    
-    depth_test2 = """
-    : maior2 2dup > if drop else swap drop then ;
-    : maior3 maior2 maior2 ;
-    : maiorN depth 1 do maior2 loop ;
-    2 11 3 4 45 8 19 maiorN .
-    """  # works, nice
+    test = sys.argv[1]    
     
     result = parser.parse(test, debug=DEBUG)
 
+    result_str = ""
     for item in result:
         result_str += item + "\n"
     
@@ -581,4 +504,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
