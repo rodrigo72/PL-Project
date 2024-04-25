@@ -235,7 +235,7 @@ def t_ANY_UCOMPARISON(t):
 
 
 def t_ANY_INTEGER(t):
-    r'\d+'
+    r'\d+(?!\S)'
     t.value = int(t.value)
     return t
 
@@ -467,8 +467,7 @@ def run_tests():
     
     tests['random'].append(
         """
-        : ?FULL  12 = IF  ." It's full "  THEN ;
-        : ?DAY  32 < IF  ." Looks good " ELSE  ." no way " THEN ;
+        1 2 2dup . . . .
         """
     )
     

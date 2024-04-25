@@ -396,9 +396,23 @@ parser.reserved_words = {
         "\tPUSHA MYPUSH CALL POP 1",
         "\tPUSHA MYPUSH CALL POP 1"
     ],
+    "2dup": [
+        "\tPUSHA MYPOP CALL",
+        "\tPUSHA MYPOP CALL",
+        "\tPUSHA INCPOINTER CALL",
+        "\tPUSHA INCPOINTER CALL",
+        "\tPUSHA MYPUSH CALL POP 1",
+        "\tPUSHA MYPUSH CALL POP 1",
+    ],
     "drop": [
         "\tPUSHA DECPOINTER CALL",
     ],
+    "depth": [
+        "\tPUSHG 4 LOAD 0",
+        "\tPUSHI 1",
+        "\tSUB",
+        "\tPUSHA MYPUSH CALL POP 1"
+    ]
 }
 parser.words = {}
 parser.for_loops = { "ENDLOOP": [] }
@@ -495,8 +509,34 @@ def main():
     1 dup . .
     """
     
+    dup2_test = """
+    1 2 2dup . . . .
+    """
+    
+    dup2_test2 = """
+    : maior2 2dup > if swap . ." é o maior " else . ." é o maior " then ;
+    77 156 maior2
+    """
+    
+    dup2_test3 = """
+    : maior2 2dup > if swap then ;
+    : maior3 maior2 maior2 . ;
+    2 11 3 maior3
+    """
+    
+    depth_test1 = """
+    1 1 1 depth .
+    """
+    
+    depth_test2 = """
+    : maior2 2dup > if drop else swap drop then ;
+    : maior3 maior2 maior2 ;
+    : maiorN depth 1 do maior2 loop ;
+    2 11 3 4 45 8 19 maiorN .
+    """  # works, nice
+    
     debug = False
-    result = parser.parse(test_string_2, debug=debug)
+    result = parser.parse(depth_test2, debug=debug)
     
     print("\n-------------- EWVM code --------------\n")
 
