@@ -98,6 +98,7 @@ tests:
     output: 45
     test: true
 
+
   - name: rectangle
     input: |
       : RECTANGLE 25 0 DO I 5 MOD 0 = IF  CR  THEN ." *" LOOP ;
@@ -110,6 +111,7 @@ tests:
       *****
     test: true
 
+
   - name: Nested for loop 2
     input: |
       : A  CR 4 1 DO  DUP I * .  LOOP  DROP ;
@@ -119,4 +121,12 @@ tests:
       123
       246
       369
+    test: true
+
+  
+  - name: While loop 1
+    input: |
+      : testing 10 9 8 7 begin . 10 = until ;
+      testing
+    output: 79
     test: true

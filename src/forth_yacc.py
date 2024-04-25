@@ -56,12 +56,13 @@ def p_Element(p):
             | Integer
             | Float
             | IfStatement
+            | WhileLoop
             | ForLoop
             | Word
     """
     p[0] = p[1]
     
-    
+
 def p_String(p):
     """
     String : STRING
@@ -179,7 +180,7 @@ def p_WordBody(p):
 
 def p_WordBodyElements(p):
     """
-    WordBodyElements : WordBodyElements WordBodyElement
+    WordBodyElements : WordBodyElements BodyElement
                      | 
     """
     if len(p) == 1:
@@ -190,20 +191,21 @@ def p_WordBodyElements(p):
         else:
             p[0] = p[1] + [p[2]]
         
-        
-def p_WordBodyElement(p):
+
+def p_BodyElement(p):
     """
-    WordBodyElement : Integer
-                    | String
-                    | Arithmetic
-                    | Comparison
-                    | Float
-                    | IfStatement
-                    | ForLoop
-                    | Word
+    BodyElement : Integer
+                | String
+                | Arithmetic
+                | Comparison
+                | Float
+                | IfStatement
+                | ForLoop
+                | WhileLoop
+                | Word
     """
-    p[0] = p[1]
-    
+    p[0] = p[1]    
+
     
 def next_for_loop_label():
     label = "FORLOOP" + str(parser.next_for_loop_idx)
@@ -252,15 +254,15 @@ def p_ForLoop(p):
         "\tCALL", 
         
         # restore struct values
-        "PUSHG 0",
-        "SWAP",
-        "STORE 2",
-        "PUSHG 0",
-        "SWAP",
-        "STORE 1",
-        "PUSHG 0",
-        "SWAP",
-        "STORE 0",
+        "\tPUSHG 0",
+        "\tSWAP",
+        "\tSTORE 2",
+        "\tPUSHG 0",
+        "\tSWAP",
+        "\tSTORE 1",
+        "\tPUSHG 0",
+        "\tSWAP",
+        "\tSTORE 0",
     ]
     
     for_loop = [
@@ -313,7 +315,7 @@ def p_FLBody(p):
 
 def p_FLBodyElements(p):
     """
-    FLBodyElements : FLBodyElements FLBodyElement
+    FLBodyElements : FLBodyElements BodyElement
                    | 
     """
     if len(p) == 1:
@@ -325,21 +327,6 @@ def p_FLBodyElements(p):
             p[0] = p[1] + [p[2]]
             
 
-def p_FLBodyElement(p):
-    """
-    FLBodyElement : Arithmetic
-                  | String
-                  | Comparison
-                  | Integer
-                  | Float
-                  | IfStatement
-                  | ForLoop
-                  | Word
-    """
-    p[0] = p[1]
-    
-
-  
 def next_if_statement_label():
     label = "IFSTATEMENT" + str(parser.if_statement_idx)
     parser.if_statement_idx += 1
@@ -372,7 +359,7 @@ def p_ISBody(p):
 
 def p_ISBodyElements(p):
     """
-    ISBodyElements : ISBodyElements ISBodyElement
+    ISBodyElements : ISBodyElements BodyElement
                    | 
     """
     if len(p) == 1:
@@ -382,20 +369,44 @@ def p_ISBodyElements(p):
             p[0] = p[1] + p[2]
         else:
             p[0] = p[1] + [p[2]]
-            
 
-def p_ISBodyElement(p):
+
+def next_while_loop_label():
+    label = "WHILELOOP" + str(parser.next_while_loop_idx)
+    parser.next_while_loop_idx += 1
+    return label
+
+
+def p_WhileLoop(p):
     """
-    ISBodyElement : Integer
-                  | String
-                  | Float
-                  | Arithmetic
-                  | Comparison
-                  | IfStatement
-                  | ForLoop
-                  | Word
+    WhileLoop : BEGIN WLBody UNTIL
+    """
+    
+    label = next_while_loop_label()
+    parser.while_loops[label] = p[2] + ["PUSHA MYPOP CALL", "\tJZ " + label]
+    
+    p[0] = ['\tPUSHA ' + label, '\tCALL']
+    
+
+def p_WLBody(p):
+    """
+    WLBody : WLBodyElements
     """
     p[0] = p[1]
+    
+
+def p_WLBodyElements(p):
+    """
+    WLBodyElements : WLBodyElements BodyElement
+                   | 
+    """
+    if len(p) == 1:
+        p[0] = []
+    else:
+        if type(p[2]) == list:
+            p[0] = p[1] + p[2]
+        else:
+            p[0] = p[1] + [p[2]]
     
 
 def p_error(p):
@@ -455,6 +466,18 @@ parser.next_word_label = "word0"
 parser.next_for_loop_idx = 0
 parser.if_statements = { "EMPTYELSE": [] }
 parser.if_statement_idx = 0
+parser.next_while_loop_idx = 0
+parser.while_loops = {}
+
+
+def dict_to_str(dict):
+    result = ""
+    for key, value in dict.items():
+        result += key + ":\n"
+        for item in value:
+            result += item + "\n"
+        result += "\tRETURN\n\n"
+    return result
 
 
 def main():
@@ -463,8 +486,7 @@ def main():
         print("Usage: python3 forth_yacc.py <code>")
         sys.exit(1)
         
-    test = sys.argv[1]    
-    
+    test = sys.argv[1]
     result = parser.parse(test, debug=DEBUG)
 
     result_str = ""
@@ -472,26 +494,10 @@ def main():
         result_str += item + "\n"
     
     result_str += "\n"
-        
-    for word_label, word in parser.words.items():
-        result_str += word_label + ":\n"
-        for item in word:
-            result_str += item + "\n"
-        result_str += "\tRETURN\n\n"
-        
-    result_str += "\n"
-        
-    for for_loop_label, for_loop in parser.for_loops.items():
-        result_str += for_loop_label + ":\n"
-        for item in for_loop:
-            result_str += item + "\n"
-        result_str += "\tRETURN\n\n"
-    
-    for if_label, if_body in parser.if_statements.items():
-        result_str += if_label + ":\n"
-        for item in if_body:
-            result_str += item + "\n"
-        result_str += "\tRETURN\n\n"
+
+    dicts = [parser.words, parser.for_loops, parser.if_statements, parser.while_loops]
+    for d in dicts:
+        result_str += dict_to_str(d)
             
     with open("vm_stack_code.txt", "r") as file:
         contents = file.read()
@@ -501,6 +507,7 @@ def main():
     
     with open("output.txt", "w") as file:
         file.write(result_str)
+
 
 if __name__ == '__main__':
     main()
