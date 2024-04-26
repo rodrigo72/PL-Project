@@ -53,7 +53,6 @@ tokens = (
     'VARIABLE',  # declare a variable : 'variable'
     'STORE', # store value in variable : '!'
     'PUSH', # puts the value of a variable on the stack  : '@'
-    'GET', # get value from variable : '?'
     
     # constants
     'CONSTANT', # declare a constant
@@ -271,11 +270,6 @@ def t_ANY_VARIABLE(t):
     return t
 
 
-def t_ANY_GET(t):
-    r'(\B|^)\?(\B|$)'
-    return t
-
-
 def t_ANY_PUSH(t):
     r'@'
     return t
@@ -467,7 +461,6 @@ def run_tests():
     tests['variables'].append(
         """
         variable abc !
-        abc ?
         abc @
         111 constant cba 
         key .
@@ -491,7 +484,7 @@ def run_tests():
         """
     )
     
-    test(tests, 'char')
+    test(tests, 'variables')
     # test_all(tests)
 
 

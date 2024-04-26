@@ -7,6 +7,7 @@ import subprocess
 import yaml
 
 COMPILE_TIMEOUT = 2
+PAGE_LOAD_TIMEOUT = 1
 
 chrome_options = Options()
 prefs = {"profile.managed_default_content_settings.images": 2,
@@ -16,9 +17,13 @@ chrome_options.add_argument("--headless")
 driver = webdriver.Chrome(options=chrome_options)
 driver.get('https://ewvm.epl.di.uminho.pt/run')
 
+time.sleep(PAGE_LOAD_TIMEOUT)
 
 def get_result(code: str) -> str:
-    textarea = driver.find_elements(By.NAME, "code")[0]
+    textarea = driver.find_elements(By.NAME, "code")
+    if not textarea:
+        return "ERROR: textarea not found"
+    textarea = textarea[0]
     textarea.clear()
     textarea.send_keys(code)
     
@@ -33,8 +38,8 @@ def get_result(code: str) -> str:
 
 
 def test(tests, test_name=None, show_input=False):
-    print()
     
+    print()
     for test in tests:
         if not test['test']: 
             continue
@@ -42,7 +47,7 @@ def test(tests, test_name=None, show_input=False):
         if test_name is not None and test_name != test['name']:
             continue
         
-        print(f"> {test['name']} : START")
+        print(f"> {test['name']} : STARTED")
         
         subprocess.run(["python3", "forth_yacc.py", test['input']], cwd="../", check=True)
         with open("../output.txt", "r") as output_file:
@@ -52,7 +57,7 @@ def test(tests, test_name=None, show_input=False):
         print(f"> {test['name']} : DONE")
         
     print('\n')
-        
+
     succeded = 0
     failed = 0
     for test in tests:
@@ -93,7 +98,7 @@ def main():
         yaml_data = yaml.safe_load(f)
 
     tests = yaml_data['tests']
-    # test(tests, test_name="spaces 2", show_input=True)
+    # test(tests, test_name="depth 1", show_input=True)
     test(tests, show_input=True)
     
     driver.quit()

@@ -168,3 +168,15 @@ tests:
       1 . 10 spaces 1 .
     output: "1          1"
     test: true
+
+
+  - name: variables 1
+    input: |
+      variable x
+      5 x !
+      x @ .
+      variable y
+      4 y !
+      y @ .
+    output: 54
+    test: true

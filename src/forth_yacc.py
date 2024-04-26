@@ -3,10 +3,14 @@ from forth_lex import tokens
 from enum import IntEnum
 from collections import deque
 import sys
-from utils import GP, STACK_SIZE
 import pyperclip
 
 DEBUG = False
+STACK_SIZE = 20
+GP = 1
+SP = 2
+VARIABLES_GP = 3
+MAX_VARIABLES = 10
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
@@ -19,15 +23,19 @@ def p_All(p):
     All : Elements
     """
     
-    init_loop_parameters = [
-        "\tPUSHG 0 PUSHI 0 STORE 0",
+    start = [
+        'ALLOC 3',
+        'ALLOC ' + str(STACK_SIZE + 1),
+        'ALLOC 1',  # stack pointer
+        'ALLOC ' + str(MAX_VARIABLES) + '\n',
+        'START',
+        '\tPUSHG ' + str(SP) + ' PUSHI 0' + ' STORE 0',
+        '\tPUSHG ' + str(GP) + ' PUSHI 1 STORE 0' 
+        "\tPUSHG 0 PUSHI 0 STORE 0",  #init loop parameters
         "\tPUSHG 0 PUSHI 0 STORE 1",
         "\tPUSHG 0 PUSHI 0 STORE 2"
     ]
-    
-    start = ['ALLOC 3'] + ['ALLOC ' + str(STACK_SIZE + 1) + '\n'] + ['START']
-    start += ['\tPUSHG ' + str(GP) + ' PUSHI 1 STORE 0']
-    start += init_loop_parameters
+        
     p[0] = start + p[1] + ["STOP"]
 
 
@@ -50,6 +58,7 @@ def p_Elements(p):
 def p_Element(p):
     """
     Element : WordDefinition
+            | Variable
             | Char
             | String
             | Arithmetic
@@ -59,6 +68,8 @@ def p_Element(p):
             | IfStatement
             | WhileLoop
             | ForLoop
+            | Store
+            | Push
             | Word
     """
     p[0] = p[1]
@@ -93,8 +104,16 @@ def p_Word(p):
         label = parser.word_to_label.get(p1_to_lower, None)
         if label and label in parser.words:
             p[0] = ['\tPUSHA ' + label, '\tCALL']
+        elif p1_to_lower in parser.variables:
+            variable_number = parser.variables[p1_to_lower]
+            p[0] = [
+                "\tPUSHG " + str(VARIABLES_GP), 
+                "\tPUSHI " + str(variable_number),
+                "\tPADD",
+                "\tPUSHA MYPUSH CALL POP 1"
+            ]
         else:
-            raise Exception("Word not found in dictionary: " + p[1])
+            raise Exception("Word/ Variable not found in dictionary: " + p[1])
     
     
 def p_Integer(p):
@@ -168,6 +187,10 @@ def p_WordDefinition(p):
     """
     p2_to_lower = p[2].lower()
     if p2_to_lower not in parser.reserved_words:
+        
+        if p2_to_lower in parser.variables:
+            parser.variables.pop(p2_to_lower)
+        
         word_label = get_next_word_label()
         parser.word_to_label[p2_to_lower] = word_label
         temp = []
@@ -211,6 +234,8 @@ def p_BodyElement(p):
                 | IfStatement
                 | ForLoop
                 | WhileLoop
+                | Store
+                | Push
                 | Word
     """
     p[0] = p[1]    
@@ -416,12 +441,43 @@ def p_WLBodyElements(p):
             p[0] = p[1] + p[2]
         else:
             p[0] = p[1] + [p[2]]
+
+
+def p_Variable(p):
+    """
+    Variable : VARIABLE
+    """
     
+    variable_to_lower = p[1].lower()
+    if variable_to_lower in parser.word_to_label:
+        label = parser.word_to_label[variable_to_lower]
+        parser.words.pop(label)
+        parser.word_to_label.pop(variable_to_lower)
+    
+    parser.variables[variable_to_lower] = parser.next_variable_idx
+    parser.next_variable_idx += 1
+    
+    p[0] = []
+    
+
+def p_Store(p):
+    """
+    Store : STORE
+    """
+    p[0] = ["\tPUSHA MYPOP CALL", "\tPUSHA MYPOP CALL", "\tSTORE 0"]
+
+
+def p_Push(p):
+    """
+    Push : PUSH
+    """
+    p[0] = ["\tPUSHA MYPOP CALL", "LOAD 0",  "\tPUSHA MYPUSH CALL POP 1"]
+
 
 def p_error(p):
     print("Syntax error in input!", p)
     parser.exito = False
-
+    
 
 """
 TESTING PARSER
@@ -462,13 +518,16 @@ parser.reserved_words = {
         "\tPUSHA DECPOINTER CALL",
     ],
     "depth": [
-        f"\tPUSHG {GP} LOAD 0",
-        "\tPUSHI 1",
-        "\tSUB",
+        f"\tPUSHG {SP} LOAD 0",
         "\tPUSHA MYPUSH CALL POP 1"
     ],
     "spaces": [
         "\tPUSHA SPACES CALL"
+    ],
+    "key": [
+        "\tREAD",
+        "\tCHRCODE",
+        "\tPUSHA MYPUSH CALL POP 1"
     ]
 }
 parser.auxiliary_labels = {
@@ -498,6 +557,8 @@ parser.if_statements = { "EMPTYELSE": [] }
 parser.if_statement_idx = 0
 parser.next_while_loop_idx = 0
 parser.while_loops = {}
+parser.variables = {}
+parser.next_variable_idx = 0
 
 
 def dict_to_str(dict):
@@ -529,10 +590,26 @@ def main():
     for d in dicts:
         result_str += dict_to_str(d)
             
-    with open("vm_stack_code.txt", "r") as file:
-        contents = file.read()
+    stack_code = f"""
+INCPOINTER:
+	PUSHG {SP} DUP 1 LOAD 0 PUSHI 1 ADD STORE 0 RETURN
+
+DECPOINTER:
+	PUSHG {SP}  DUP 1 LOAD 0 PUSHI 1 SUB STORE 0 RETURN
+
+MYPUSH:
+	PUSHG {SP} LOAD 0
+	PUSHG {GP} SWAP PADD PUSHFP LOAD -1 STORE 0
+	JUMP INCPOINTER
+	RETURN
+
+MYPOP:
+	PUSHG {SP} LOAD 0 PUSHI 1 SUB
+	PUSHG {GP} SWAP PADD LOAD 0
+	JUMP DECPOINTER
+	RETURN"""
     
-    result_str += '\n' + contents
+    result_str += '\n' + stack_code
     pyperclip.copy(result_str)
     
     with open("output.txt", "w") as file:
