@@ -8,8 +8,7 @@ import pyperclip
 DEBUG = False
 STACK_SIZE = 20
 GP = 1
-SP = 2
-VARIABLES_GP = 3
+VARIABLES_GP = 2
 MAX_VARIABLES = 10
 
 # VM : https://ewvm.epl.di.uminho.pt/
@@ -24,16 +23,13 @@ def p_All(p):
     """
     
     start = [
-        'ALLOC 3',
+        'ALLOC 2',
         'ALLOC ' + str(STACK_SIZE + 1),
-        'ALLOC 1',  # stack pointer
         'ALLOC ' + str(MAX_VARIABLES) + '\n',
         'START',
-        '\tPUSHG ' + str(SP) + ' PUSHI 0' + ' STORE 0',
-        '\tPUSHG ' + str(GP) + ' PUSHI 1 STORE 0' 
+        '\tPUSHG ' + str(GP) + ' PUSHI 0 STORE 0' 
         "\tPUSHG 0 PUSHI 0 STORE 0",  #init loop parameters
-        "\tPUSHG 0 PUSHI 0 STORE 1",
-        "\tPUSHG 0 PUSHI 0 STORE 2"
+        "\tPUSHG 0 PUSHI 0 STORE 1"
     ]
         
     p[0] = start + p[1] + ["STOP"]
@@ -260,8 +256,6 @@ def p_ForLoop(p):
         "\tLOAD 0",
         "\tPUSHG 0",
         "\tLOAD 1",
-        "\tPUSHG 0",
-        "\tLOAD 2",
         
         # pop idx and limit
         "\tPUSHA MYPOP CALL",
@@ -278,19 +272,11 @@ def p_ForLoop(p):
         "\tSWAP",
         "\tSTORE 1",
         
-        # iteration
-        "\tPUSHG 0",
-        "\tPUSHI 0",
-        "\tSTORE 2",
-        
         # call loop
         "\tPUSHA " + for_loop_label, 
         "\tCALL", 
         
         # restore struct values
-        "\tPUSHG 0",
-        "\tSWAP",
-        "\tSTORE 2",
         "\tPUSHG 0",
         "\tSWAP",
         "\tSTORE 1",
@@ -308,20 +294,11 @@ def p_ForLoop(p):
         '\tJZ ' + 'ENDLOOP',
         
         '\tPUSHG 0',
+        '\tDUP 1',
         '\tLOAD 0',
         '\tPUSHI 1',
         '\tADD',
-        '\tPUSHG 0',
-        '\tSWAP',
         '\tSTORE 0',
-        
-        '\tPUSHG 0',
-        '\tLOAD 2',
-        '\tPUSHI 1',
-        '\tADD',
-        '\tPUSHG 0',
-        '\tSWAP',
-        '\tSTORE 2',
     ]
     
     for index, value in enumerate(p[2]):
@@ -471,7 +448,7 @@ def p_Push(p):
     """
     Push : PUSH
     """
-    p[0] = ["\tPUSHA MYPOP CALL", "LOAD 0",  "\tPUSHA MYPUSH CALL POP 1"]
+    p[0] = ["\tPUSHA MYPOP CALL", "\tLOAD 0",  "\tPUSHA MYPUSH CALL POP 1"]
 
 
 def p_error(p):
@@ -486,7 +463,10 @@ TESTING PARSER
 parser = yacc.yacc()
 parser.exito = True
 parser.reserved_words = {
-    "." : ["\tPUSHA MYPOP CALL", "\tWRITEI"],
+    "." : [
+        "\tPUSHA MYPOP CALL", 
+        "\tWRITEI"
+    ],
     "i" : ["I"],
     "swap" : [
         "\tPUSHA MYPOP CALL", 
@@ -518,7 +498,7 @@ parser.reserved_words = {
         "\tPUSHA DECPOINTER CALL",
     ],
     "depth": [
-        f"\tPUSHG {SP} LOAD 0",
+        f"\tPUSHG {GP} LOAD 0",
         "\tPUSHA MYPUSH CALL POP 1"
     ],
     "spaces": [
@@ -574,10 +554,10 @@ def dict_to_str(dict):
 def main():
     
     if len(sys.argv) < 2:
-        print("Usage: python3 forth_yacc.py <code>")
-        sys.exit(1)
-        
-    test = sys.argv[1]
+        test = sys.stdin.read()
+    else:
+        test = sys.argv[1]
+    
     result = parser.parse(test, debug=DEBUG)
 
     result_str = ""
@@ -592,22 +572,29 @@ def main():
             
     stack_code = f"""
 INCPOINTER:
-	PUSHG {SP} DUP 1 LOAD 0 PUSHI 1 ADD STORE 0 RETURN
+    PUSHG {GP} DUP 1 LOAD 0 PUSHI 1 ADD STORE 0
+    RETURN
+
 
 DECPOINTER:
-	PUSHG {SP}  DUP 1 LOAD 0 PUSHI 1 SUB STORE 0 RETURN
+    PUSHG {GP} DUP 1 LOAD 0 PUSHI 1 SUB STORE 0
+    RETURN
 
 MYPUSH:
-	PUSHG {SP} LOAD 0
-	PUSHG {GP} SWAP PADD PUSHFP LOAD -1 STORE 0
-	JUMP INCPOINTER
-	RETURN
+    PUSHG {GP} DUP 1 DUP 2
+    LOAD 0 PADD 
+    PUSHFP LOAD -1 
+    STORE 1
+
+    LOAD 0 PUSHI 1 ADD STORE 0 
+    RETURN
 
 MYPOP:
-	PUSHG {SP} LOAD 0 PUSHI 1 SUB
-	PUSHG {GP} SWAP PADD LOAD 0
-	JUMP DECPOINTER
-	RETURN"""
+    PUSHG {GP} DUP 1 
+    LOAD 0 PUSHI 1 SUB DUP 1
+    PUSHG {GP} SWAP STORE 0
+    PADD LOAD 1
+    RETURN"""
     
     result_str += '\n' + stack_code
     pyperclip.copy(result_str)

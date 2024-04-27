@@ -1,5 +1,6 @@
 import ply.lex as lex
-from collections import defaultdict
+import yaml
+
 
 """
 Forth Lexical Analyzer
@@ -328,165 +329,19 @@ def get_input():
             print(tok)
             
 
-def test_all(tests):
-    for test_type, test_values in tests.items():
-        test(tests, test_type)
-        print()
+def run_tests():
+    with open("testing/tests.yaml", "r") as f:
+        yaml_data = yaml.safe_load(f)
 
-
-def test(tests, test_type):
-    print(f'Testing {test_type}:')
-    for test in tests[test_type]:
-        lexer.input(test)
+    tests = yaml_data['tests']
+    
+    for test in tests:
+        print(f"Test: {test['name']}\n")
+        lexer.input(test['input'])
         for tok in lexer:
             print(tok)
-        print()
-
-
-def run_tests():
-    tests = defaultdict(lambda: [])
-    
-    tests['word'].append(
-        """
-        : word 1 2 + . ; 
-        word
-        """
-    )  # working
-    
-    tests['commentp'].append(
-        """
-        : word ( -- comment -- ) 1 2 + . ;
-        : word 1 2 ( comment ) + . ;
-        ( comment )
-        : word 1 2 + ( comment ) . ;
-        """
-    ) # working
-    
-    tests['commentb'].append(
-        """
-        : word 1 2 + . ; \ comment here
-        : not-a-comment 1 2 + . ;\comment again
-        """
-    ) # working
-    
-    tests['forloop'].append(
-        """
-        : my-loop 10 0 do i . loop ;
-        : TEST   10 0 DO  CR ." Hello "  LOOP ;
-        : MULTIPLICATIONS  CR 11 1 DO  DUP I * .  LOOP  DROP ;
-        : COMPOUND  ( amt int -- ) SWAP 21 1 DO  I . 2DUP R% + DUP . CR LOOP  2DROP ;  
-        : sum ( n -- sum )
-            0 swap 1 do
-            i +
-            loop ; 
-        10 3 do i . loop
-        """
-    ) # working 
-    # (the Forth word 'i' copies the current loop index onto the parameter stack)
-    
-    tests['nested-forloop'].append(
-        """
-        : test 3 0 DO 1 1 + 3 0 DO . LOOP LOOP ;
-        """
-    ) 
-    
-    tests['forloopplus'].append(
-        """
-        : PENTAJUMPS  50 0 DO  I .  5 +LOOP ;
-        : INC-COUNT  DO  I . DUP +LOOP  DROP ;
-        10 3 do i . 2 +loop
-        """
-    ) # working
-    
-    tests['whileloop'].append(
-        """
-        : loop-test begin 1 - dup dup . 0 = until ;
-        : loop-test BEGIN ... flag UNTIL ;
-        : loop-test BEGIN ... flag WHILE ... REPEAT ;
-        : loop-test ... AGAIN ;
-        \ this should raise an error (multiple WHILE):
-        \ : loop-test BEGIN ... flag WHILE ... flag WHILE ... REPEAT ; 
-        BEGIN 1 - dup dup . 0 = until
-        """
-    ) # working
-    
-    tests['ifstatement'].append(
-        """
-        : ?FULL  12 = IF  ." It's full "  THEN ;
-        : ?DAY  32 < IF  ." Looks good " ELSE  ." no way " THEN ;
-        : /CHECK   DUP 0= IF  ." invalid " DROP  ELSE  /  THEN ;
-        \ this should raise an error (multiple ELSE):
-        \ : ?DAY  32 < IF  ." Looks good " ELSE  . ELSE ." no way " THEN ;
-        : factorial ( n -- n! )
-            dup 0 = if
-            drop 1
-            else
-            dup 1 - recurse *
-            then ;
-        12 12 = IF ." It's full " THEN
-        """
-    ) # working
-    
-    tests['nested-ifstatement'].append(
-        """
-        : EGGSIZE ( n -- )
-            DUP 18 < IF  ." reject "      ELSE
-            DUP 21 < IF  ." small "       ELSE
-            DUP 24 < IF  ." medium "      ELSE
-            DUP 27 < IF  ." large "       ELSE
-            DUP 30 < IF  ." extra large " ELSE
-                ." error "
-            THEN THEN THEN THEN THEN DROP ;
-        """
-    )
-    
-    tests['ucomparison'].append(
-        """
-        : VEGETABLE  DUP 0<  SWAP 10 MOD 0= + IF  ." ARTICHOKE "  THEN ;
-        """
-    ) # working
-    
-    tests['strings'].append(
-        """
-        : TEST   ." sample " ;
-        : "LABEL"  C" REJECT  SMALL   MEDIUM  LARGE   XTRA LRGERROR   " ;
-        : TESTKEY ( -- )
-            ." Hit a key: " KEY CR
-            ." That = " . CR
-        ;
-        TESTKEY
-        """
-    ) # working
-    
-    tests['variables'].append(
-        """
-        variable abc !
-        abc @
-        111 constant cba 
-        key .
-        """
-    ) # working
-    
-    tests['char'].append(
-        """
-        CHAR W .
-        CHAR % DUP . EMIT
-        CHAR A DUP .
-        32 + EMIT
-        CHAR AAAAAA
-        97 EMIT
-        """
-    )
-    
-    tests['random'].append(
-        """
-        1 2 2dup . . . .
-        """
-    )
-    
-    test(tests, 'variables')
-    # test_all(tests)
-
+        print('\n----------------\n')
+        
 
 if __name__ == '__main__':
     run_tests()
