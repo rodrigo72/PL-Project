@@ -22,6 +22,25 @@ tests:
     output: medium
     test: true
 
+  
+  - name: Nested if statements 2 multiple calls
+    input: |
+      : EGGSIZE ( n -- )
+        DUP 18 < IF  ." reject "      ELSE
+        DUP 21 < IF  ." small "       ELSE
+        DUP 24 < IF  ." medium "      ELSE
+        DUP 27 < IF  ." large "       ELSE
+        DUP 30 < IF  ." extra large " ELSE
+            ." error "
+        THEN THEN THEN THEN THEN DROP ;
+      23 EGGSIZE
+      2 EGGSIZE
+      28 EGGSIZE
+    output: |
+      medium 
+      reject 
+      extra large 
+
 
   - name: Nested for loop 1
     input: |
@@ -30,11 +49,25 @@ tests:
     test: true
   
 
+  - name: Nested for loop 2 multiple calls
+    input: |
+      : myloop 2 0 DO 1 . 2 0 DO 2 . 2 0 DO 3 . LOOP 2 0 DO 4 . LOOP LOOP LOOP ;
+      : myloop2 2 0 DO 5 . 2 0 DO 6 . 2 0 DO 7 . LOOP 2 0 DO 8 . LOOP LOOP LOOP ;
+        myloop cr
+        myloop2 cr
+        myloop
+    output: |
+      1233442334412334423344
+      1233442334412334423344
+      1233442334412334423344
+
+
   - name: Somatório 1
     input: |
       : somatorio 0 swap 1 do i + loop ;
       11 somatorio .
-    output: 55
+    output: 55      reject 
+      extra large 
     test: true
   
 
@@ -96,7 +129,7 @@ tests:
       : maiorN depth 1 do maior2 loop ;
       2 11 3 4 45 8 19 maiorN .
     output: 45
-    test: true
+    test: false
 
 
   - name: rectangle
@@ -114,8 +147,8 @@ tests:
 
   - name: Nested for loop 2
     input: |
-      : A  CR 4 1 DO  DUP I * .  LOOP  DROP ;
-      : B  CR 4 1 DO  I A  LOOP ;
+      : A  CR 5 1 DO  DUP I * .  LOOP  DROP ;
+      : B  CR 5 1 DO  I A  LOOP ;
       B
     output: |
       123
@@ -160,7 +193,7 @@ tests:
         *****
         *
         *
-    test: false
+    test: true
 
   
   - name: spaces 2

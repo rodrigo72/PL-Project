@@ -49,7 +49,7 @@ def test(tests, test_name=None, show_input=False):
         
         print(f"> {test['name']} : STARTED")
         
-        subprocess.run(["python3", "forth_yacc.py", test['input']], cwd="../", check=True)
+        subprocess.run(["python3", "forth_yacc_v2.py", test['input']], cwd="../", check=True)
         with open("../output.txt", "r") as output_file:
             ewvm_code = output_file.read()
         result = get_result(ewvm_code)
@@ -105,4 +105,5 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    print("NO LONGER WORKING DUE TO CHANGES IN THE EWVM WEBSITE")
+    # main()
