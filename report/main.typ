@@ -203,7 +203,7 @@ O analisador léxico foi testado com os dados do ficheiro `tests.yaml` da direto
   stroke: luma(230),
   [```python
 with open("testing/tests.yaml", "r") as f:
-        yaml_data = yaml.safe_load(f)
+  yaml_data = yaml.safe_load(f)
 
 tests = yaml_data['tests']
 
@@ -241,6 +241,7 @@ Element : WordDefinition
         | Variable
         | Char
         | String
+        | Key
         | Arithmetic
         | Comparison
         | Integer
@@ -255,6 +256,7 @@ Element : WordDefinition
 BodyElement : Integer
             | Char
             | String
+            | Key
             | Arithmetic
             | Comparison
             | Float
@@ -308,8 +310,10 @@ WLBodyElements :
   |
 
 
+
 Char : CHAR
 String : STRING
+Key : KEY
 Word : WORD
 Variable : VARIABLE
 Store : STORE
@@ -321,51 +325,9 @@ Push : PUSH
 
 #pagebreak()
 
-== Stack
-
-A linguagem Forth é _stack oriented_, o que significa que todas as operações são realizadas sobre uma pilha de dados. A EWVM possui duas stacks (_call stack_ e _operand stack_), e duas heaps (_structs heap_ e _strings heap_).
-
-#figure(
-  image("images/ewvm_stacks.png", width: 80%)
-)
-
-No entanto, quando é chamada uma _label_, não é possível modificar elementos adicionados anteriormente à chamada, i.e., entre o _global pointer_ e o _frame pointer_.
-
-Portanto, decidimos criar uma stack adicional, de modo a que fosse possível utilizar mais funcionalidades da EWVM, como _labels_, _calls_ e _jumps_.
-
-#figure(
-  block(
-  fill: rgb("#fbfbfb"),
-  inset: 8pt,
-  radius: 4pt,
-  stroke: luma(230),
-  [```txt
-ALLOC 20
-
-MYPUSH:
-    PUSHG 0 DUP 1 DUP 2
-    LOAD 0 PADD PUSHFP LOAD -1 STORE 1
-    LOAD 0 PUSHI 1 ADD STORE 0 
-    RETURN
-
-MYPOP:
-    PUSHG 0 DUP 1 
-    LOAD 0 PUSHI 1 SUB DUP 1
-    PUSHG 0 SWAP STORE 0 PADD LOAD 1
-    RETURN
-```
-  ])
-)
-
-O _stack pointer_ é guardado na posição 0 da struct alocada. A função `MYPUSH` é responsável por adicionar um elemento à stack, e a função `MYPOP` por retirar um elemento da stack.
-
-O aspeto negativo desta abordagem é que são geradas mais instruções ao utilizar a stack adicional, o que pode tornar o código menos eficiente.
-
-#pagebreak()
-
 == Funções
 
-O código das palavras definidas é guardado num dicionário, `parser.words`, onde a chave é o nome da _label_ -- as _words_ são convertidas para _labels_ através da função `get_next_word_label`. Assim, quando uma palavra é chamada, basta chamar a _label_ correspondente, `PUSHA <label> CALL`.
+O código das funções, ou _words_, é guardado no dicionário `parser.words`, onde a chave é uma _label_, única para cada função, e o valor é uma lista de instruções.
 
 #figure(
   block(
@@ -393,9 +355,101 @@ def p_WordDefinition(p):
   ])
 )
 
+Quando uma WORD é encontrada, esta pode ser uma palavra reservada, como `cr` ou `emit`, uma variável, ou uma função que tenha sido definida no código. 
+
+Se for uma palavra reservada, então é introduzido o código guardado no dicionário `parser.reserved_words`, i.e., `p[0] = parser.reserved_words[p1_to_lower]`.
+
+Se for uma variável, é introduzido na stack o endereço correspondente a essa variável, sendo que cada variável tem um índice associado, guardado no dicionário `parser.variables`. A partir deste índice, é possível aceder à posição da variável na struct.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  [```python
+variable_number = parser.variables[p1_to_lower]
+p[0] = [
+    "PUSHG " + str(VARIABLES_GP), 
+    "PUSHI " + str(variable_number),
+    "PADD"
+]
+```
+  ])
+)
+
+Se for uma função definida no código, então é introduzida a _label_ correspondente.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  [```python
+label = parser.word_to_label.get(p1_to_lower, None)
+  if label and label in parser.words:
+      p[0] = [label]
+```
+  ])
+)
+
+#pagebreak()
+
+No fim do _parsing_, estas _labels_ são substituídas pelo código correspondente (até não existirem mais labels para substituir). Para além disso, é necessário modificar o nome das _labels_ dentro da função (_for loops_, _while loops_, _if statements_), caso contrário, não se poderia chamar a mesma função mais do que uma vez, visto que as _labels_ seriam redefinidas.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  width: 103%,
+  [```python
+def replace_words(code):
+    pattern_word = r'(\<\<(\w+?)(\d+)\>\>)'
+    pattern_label = r'(FORLOOP|ENDLOOP|IFSTATEMENT|ENDIF|WHILELOOP)(\d+)'
+    word_usage = defaultdict(int)
+    max_labels = defaultdict(int)
+
+    # repetir até não haver mais word labels para substituir
+    while re.search(pattern_word, code):
+        def replace_word(match):
+          word = match.group(1)
+          word_code = '\n'.join(parser.words[word])
+
+          if word_usage[word] > 0:
+            
+            def replace_labels(match2):
+              inc = get_label_value(match2.group(1)) 
+              # incrementar o valor antigo da label pelo valor atual 
+              number = int(match2.group(2)) + inc
+              max_labels[match2.group(1)] = max(
+                max_labels[match2.group(1)], number
+              )
+              return match2.group(1) + str(number)
+          
+            # reajustar valors das labels
+            word_code = re.sub(pattern_label, replace_labels, word_code)
+            # incrementar labels de acordo com os máximos encontrados
+            increment_labels(max_labels, 1)
+            
+          word_usage[word] += 1
+          return word_code
+
+      # substituir word labels por código
+      code = re.sub(pattern_word, replace_word, code)
+
+  return code
+``` 
+  ])
+)
+
+#pagebreak()
+
 == Expressões aritméticas
 
-Para efetuar operações aritméticas, é necessário retirar os dois elementos do topo da stack, efetuar a operação e adicionar o resultado à stack.
+Para efetuar operações aritméticas, é introduzida a operação da EWVM correspondente à operação aritmética encontrada.
 
 #figure(
   block(
@@ -408,19 +462,13 @@ def p_Arithmetic(p):
     """Arithmetic : ARITHMETIC"""
     temp = ""
     if p[1] == "+":
-        temp = "\tADD"
+        temp = "ADD"
     # ...
-    p[0] = [
-      "PUSHA MYPOP CALL", 
-      "PUSHA MYPOP CALL", 
-      "SWAP", temp, 
-      "PUSHA MYPUSH CALL POP 1"
-    ]
+    p[0] = temp
 ```
   ])
 )
 
-#pagebreak()
 == Caracteres e strings
 
 As funções `cr` e `emit` são definidas como _reserved words_ no dicionário `parser.reserved_words`.
@@ -434,12 +482,12 @@ As funções `cr` e `emit` são definidas como _reserved words_ no dicionário `
   [```python
 parser.reserved_words = {
     "cr" : ["WRITELN"],
-    "emit" : ["PUSHA MYPOP CALL","WRITECHR",],
+    "emit" : ["WRITECHR"],
 }```
   ])
 )
 
-Utilizamos a operação `CHRCODE` para converter um caracter para o seu código ASCII, e a operação `WRITES` para imprimir uma string.
+Utilizamos a operação `CHRCODE` para converter um caracter para o seu código ASCII, a operação `WRITES` para imprimir uma string, e a operação `READ` para ler um caracter do input.
 
 #figure(
   block(
@@ -450,37 +498,27 @@ Utilizamos a operação `CHRCODE` para converter um caracter para o seu código 
   [```python
 def p_Char(p):
     """Char : CHAR"""
-    p[0] = [
-      "PUSHS \"" + str(p[1]) + "\" CHRCODE", 
-      "PUSHA MYPUSH CALL POP 1"
-    ]
+    p[0] = ["PUSHS \"" + str(p[1]) + "\" CHRCODE"]
 
 def p_String(p):
     """String : STRING"""
     if p[1][0] == '.':
-        p[0] = "PUSHS \"" + p[1][1] + "\" WRITES"
+        p[0] =  ["PUSHS \"" + p[1][1] + "\" WRITES"]
+
+def p_Key(p):
+    """Key : KEY"""
+    p[0] = ["\tREAD", "\tCHRCODE"]
 ```
   ])
 )
+
+#pagebreak()
 
 == Condicionais
 
-O código corresponde às partes do _if statement_ é guardado no dicionário `parser.if_statements`, onde a chave é a _label_ correspondente ao _if statement_. 
+Para os condicionais, são utilizadas _labels_ (sem _calls_) de modo a que seja possível saltar para o fim do _if statement_ ou para o _else_. 
 
-#figure(
-  block(
-  fill: rgb("#fbfbfb"),
-  inset: 8pt,
-  radius: 4pt,
-  stroke: luma(230),
-  [```txt
-parser.if_statements = { "EMPTYELSE": [] }
-parser.if_statement_idx = 0
-```
-  ])
-)
-
-Depois de retirado o elemento do topo da stack, é utilizada a operação de controlo `JZ` que verifica se este é zero. Se for, salta para a _label_ especificada (com o código correspondente), caso contrário, retorna (se não houver um `else`), ou salta para a _label_ correspondente ao `else`.
+Por exemplo, se a condição for verdadeira, o salto para a _label_ do _else_ não é efetuado (`JZ IFSTATEMENT`), depois é executado o código correspondente à condição verdadeira, e, por fim, é feito um salto para o fim do _if statement_ (`JUMP ENDIF`), para que a _label_ do _else_ não seja executada. Se a condição for falsa, é executado um salto para a _label_ do _else_, onde é executado o código correspondente -- no fim deste código, inicia-se a label do `ENDIF`, onde estará o código restante do programa.
 
 #figure(
   block(
@@ -490,126 +528,70 @@ Depois de retirado o elemento do topo da stack, é utilizada a operação de con
   stroke: luma(230),
   [```python
 def p_IfStatement(p):
-    """IfStatement : IF ISBody THEN
-                | IF ISBody ELSE ISBody THEN"""
+    """
+    IfStatement : IF ISBody THEN
+                | IF ISBody ELSE ISBody THEN
+    """
     if len(p) == 4:
-        label = next_if_statement_label()
-        p[0] = ["PUSHA " + label + " CALL"]
-        parser.if_statements[label] = [
-          "PUSHA MYPOP CALL", "JZ EMPTYELSE"] + p[2]
+        endif = next_endif_label()
+        p[0] = ["JZ " + endif] + p[2] + [endif + ':']
     else:
-        # ...
+        endif = next_endif_label()
+        label = next_if_statement_label()
+        p[0] = ['JZ ' + label] + p[2] + ['JUMP ' + endif, 
+                label + ':'] + p[4] + [endif + ':']
+
 ```
   ])
 )
 
+#figure(
+    grid(
+        columns: 2, 
+        rows: 2,    
+        gutter: 2mm,    
+        [Código Forth], [Código EWVM],
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+          : test 0 = if ." condição verdadeira " else ." condição falsa " then ; 
+          0 test
+          ```],
+        ),
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+          START
+            PUSHI 0
+            PUSHI 0
+            EQUAL
+            JZ IFSTATEMENT0
+            PUSHS "condição verdadeira " 
+            WRITES
+            JUMP ENDIF0
+          IFSTATEMENT0:
+            PUSHS "condição falsa " WRITES
+          ENDIF0:
+          STOP
+          ```]
+        )
+    )
+)
+
 #pagebreak()
 
-== Ciclos 
+== Ciclos
 
-=== Inicialização do ciclo
+=== For loop
 
 Os ciclos `for` utilizam uma struct que guarda dois valores: o índice em que começa e o limite do ciclo.
-
-Utilizamos a _operand stack_ para guardar os valores atuais do índice e do limite do ciclo, os quais são restaurados no final do ciclo. Usamos esta estratégia para que `nested loops` funcionem corretamente utilizando a mesma struct.
-
-Assim, os dois valores do topo da stack adicional são guardados na struct, a _label_ do ciclo é chamada, e no final esses valores são substituídos/ "restaurados" pelos valores da iteração do ciclo anterior (caso exista).
-
-#figure(
-    grid(
-        columns: 2,     
-        gutter: 4mm,    
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          stroke: luma(230),
-          [```python
-          # load struct values
-          "PUSHG 0",
-          "LOAD 0",
-          "PUSHG 0",
-          "LOAD 1",
-
-          # pop idx and limit
-          "PUSHA MYPOP CALL",
-          "PUSHA MYPOP CALL",
-          "SWAP",
-
-          # store idx
-          "PUSHG 0",
-          "SWAP",
-          "STORE 0",
-
-
-          ```],
-        ),
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          stroke: luma(230),
-          [```python
-          # store limit
-          "PUSHG 0",
-          "SWAP",
-          "STORE 1",
-
-          # call loop
-          "PUSHA " + for_loop_label, 
-          "CALL", 
-
-          # restore struct values
-          "PUSHG 0",
-          "SWAP",
-          "STORE 1",
-          "PUSHG 0",
-          "SWAP",
-          "STORE 0",
-          ```]
-        )
-    )
-)
-
-
-=== Corpo do ciclo
-
-Primeiramente, é verificado se o índice é menor que o limite. Caso seja, o corpo do ciclo é executado, e, no final, o índice é incrementado e o ciclo é repetido.
-
-#figure(
-    grid(
-        columns: 2,     
-        gutter: 4mm,    
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          stroke: luma(230),
-          [```python
-          'PUSHG 0',
-          'LOAD 0',
-          'PUSHG 0',
-          'LOAD 1',
-          'INF',
-          'JZ ' + 'ENDLOOP',
-          ```],
-        ),
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          stroke: luma(230),
-          [```python
-          'PUSHG 0',
-          'DUP 1',
-          'LOAD 0',
-          'PUSHI 1',
-          'ADD',
-          'STORE 0',
-          ```]
-        )
-    )
-)
+Ao inicializar um ciclo, os valores atuais do índice e do limite são guardados numa _custom stack_, depois são inseridos os novos valores na struct, o ciclo é executado, e, no final, restauramos esses valores. Desta forma, é possível executar _nested loops_, visto que sempre que se executa um ciclo dentro de outro, quando este acaba o estado do ciclo anterior é restaurado.
 
 #figure(
   block(
@@ -618,14 +600,203 @@ Primeiramente, é verificado se o índice é menor que o limite. Caso seja, o co
   radius: 4pt,
   stroke: luma(230),
   [```python
-for_loop += ['JUMP ' + for_loop_label]
-parser.for_loops[for_loop_label] = for_loop  
-p[0] = init
+init = [
+    "PUSHG 0 LOAD 0", # load loop parameter values
+    "PUSHG 0 LOAD 1",
+    "PUSHA MYPUSH CALL POP 1", # store those in the stack
+    "PUSHA MYPUSH CALL POP 1",
+    "PUSHG 0 SWAP STORE 0", # store new loop parameter values
+    "PUSHG 0 SWAP STORE 1",
+]
 ```
   ])
 )
 
+O _stack pointer_ é guardado na posição 0 da struct alocada. A função `MYPUSH` é responsável por adicionar um elemento à stack, e a função `MYPOP` por retirar um elemento da stack.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  [```txt
+ALLOC 20
+
+MYPUSH:
+    PUSHG 0 DUP 1 DUP 2
+    LOAD 0 PADD PUSHFP LOAD -1 STORE 1
+    LOAD 0 PUSHI 1 ADD STORE 0 
+    RETURN
+
+MYPOP:
+    PUSHG 0 DUP 1 
+    LOAD 0 PUSHI 1 SUB DUP 1
+    PUSHG 0 SWAP STORE 0 PADD LOAD 1
+    RETURN
+```
+  ])
+)
+
+No corpo do ciclo, é verificado se o índice é menor que o limite. Caso seja, o índice é incrementado, o corpo do ciclo é executado, e, no final, é feito um salto para o início do ciclo.
+Caso contrário, é feito um salto para o fim do ciclo (`ENDLOOP`), onde os valores da struct são restaurados.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  [```python
+for_loop = [
+    "PUSHG 0 LOAD 0",
+    "PUSHG 0 LOAD 1",
+    "INF",
+    "JZ " + end_loop_label,
+    'PUSHG 0', 'DUP 1', 'LOAD 0', 'PUSHI 1', 'ADD', 'STORE 0',
+]
+        
+for_loop += p[2] + ['\tJUMP ' + for_loop_label]
+
+restore = [
+    'PUSHG 0', 'PUSHA MYPOP CALL', 'STORE 0',
+    'PUSHG 0', 'PUSHA MYPOP CALL', 'STORE 1'
+]
+
+p[0] = init + [for_loop_label + ':'] + for_loop 
+        + [end_loop_label + ':'] + restore
+```
+  ])
+)
+
+Exemplo do código gerado para um ciclo `for` (`3 2 0 do 1 - dup dup . loop`).
+
+#figure(
+    grid(
+        columns: 2,     
+        gutter: 2mm,    
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+ALLOC 2
+ALLOC 21
+ALLOC 10
+
+START
+	PUSHG 1 PUSHI 0 STORE 0
+	PUSHG 0 PUSHI 0 STORE 0
+	PUSHG 0 PUSHI 0 STORE 1
+	PUSHI 3
+	PUSHI 2
+	PUSHI 0
+	PUSHG 0 LOAD 0
+	PUSHG 0 LOAD 1
+	PUSHA MYPUSH CALL POP 1
+	PUSHA MYPUSH CALL POP 1
+	PUSHG 0 SWAP STORE 0
+	PUSHG 0 SWAP STORE 1
+FORLOOP0:
+	PUSHG 0 LOAD 0
+	PUSHG 0 LOAD 1
+	INF JZ ENDLOOP0
+          ```],
+        ),
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+	PUSHG 0
+	DUP 1
+	LOAD 0
+	PUSHI 1
+	ADD
+	STORE 0
+	PUSHI 1
+	SUB
+	DUP 1
+	DUP 1
+	WRITEI
+	JUMP FORLOOP0
+ENDLOOP0:
+	PUSHG 0
+	PUSHA MYPOP CALL
+	STORE 0
+	PUSHG 0
+	PUSHA MYPOP CALL
+	STORE 1
+STOP
+
+
+          ```]
+        )
+    )
+)
+
 #pagebreak()
+
+=== While loop
+
+No ciclo `while`, o corpo do ciclo é executado enquanto o valor do topo da stack no final da execução do corpo do ciclo for diferente de zero.
+
+#figure(
+  block(
+  fill: rgb("#fbfbfb"),
+  inset: 8pt,
+  radius: 4pt,
+  stroke: luma(230),
+  [```python
+def p_WhileLoop(p):
+    """
+    WhileLoop : BEGIN WLBody UNTIL
+    """
+    label = next_while_loop_label()
+    p[0] = [label + ':'] + p[2] + ['JZ ' + label]
+```
+  ])
+)
+
+#figure(
+    grid(
+        columns: 2, 
+        rows: 2,    
+        gutter: 2mm,    
+        [Código Forth], [Código EWVM],
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+          : test 10 9 8 7 begin . 10 = until ;
+          test
+          ```],
+        ),
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          [```txt
+          START
+            PUSHI 10
+            PUSHI 9
+            PUSHI 8
+            PUSHI 7
+          WHILELOOP0:
+            WRITEI
+            PUSHI 10
+            EQUAL
+            JZ WHILELOOP0
+          STOP
+          ```]
+        )
+    )
+)
 
 == Variáveis
 
@@ -696,11 +867,9 @@ def p_Push(p):
   ])
 )
 
-#pagebreak()
-
 == Funções adicionais
 
-Algumas funções adicionais foram implementadas e estão guardadas no dicionário `parser.reserved_words`: `dup`, `2dup`, `drop`, `depth`, `spaces`, `key`, etc.
+Algumas funções adicionais foram implementadas e estão guardadas no dicionário `parser.reserved_words`: `dup`, `2dup`, `drop`, `spaces`, `key`, etc.
 
 #figure(
   block(
@@ -709,20 +878,30 @@ Algumas funções adicionais foram implementadas e estão guardadas no dicionár
   radius: 4pt,
   stroke: luma(230),
   [```python
-"drop": [
-    "PUSHA DECPOINTER CALL",
-],
-"depth": [
-    f"PUSHG {GP} LOAD 0",
-    "PUSHA MYPUSH CALL POP 1"
-],
+parser.reserved_words = {
+    "cr" : ["WRITELN"],
+    "emit" : ["WRITECHR"],
+    "dup": ["DUP 1"],
+    "2dup": ["PUSHA TWODUP CALL"],
+    ...
+}
+parser.auxiliary_labels = { 
+  "2dup": (False, [
+        "TWODUP:",
+        "PUSHFP LOAD -2",
+        "PUSHFP LOAD -1",
+        "RETURN",  
+    ])
+}
 ```
   ])
 )
 
+#pagebreak()
+
 == Testes
 
-=== Programa de testes
+=== Programa de testes #footnote("Com a nova versão do website da EWVM (1.3), este programa de testes deixou de funcionar.")
 
 Os testes foram efetuados com o programa `test.py` na diretoria `testing`. Este programa:
 1. Lê o ficheiro `tests.yaml` com recurso à biblioteca `yaml`, que contém os testes a efetuar.
@@ -767,9 +946,9 @@ def get_result(code: str) -> str:
 )
 4. Por fim, imprime os resultados para o stdout.
 
-=== Testes efetuados e resultados #footnote([
-  Devido à mudança do limite de instruções de 7000 para 1000 na EWVM, alguns dos testes que envolvem ciclos deixaram de funcionar. No entanto, funcionam corretamente sem esse limite imposto.
-])
+#pagebreak()
+
+=== Testes efetuados e resultados obtidos
 
 #figure(
     grid(
@@ -793,7 +972,9 @@ DUP 27 < IF  ." large "       ELSE
 DUP 30 < IF  ." extra large " ELSE
     ." error "
 THEN THEN THEN THEN THEN DROP ;
-23 EGGSIZE
+23 EGGSIZE CR
+2 EGGSIZE CR
+28 EGGSIZE
           ```],
         ),
         block(
@@ -803,7 +984,9 @@ THEN THEN THEN THEN THEN DROP ;
           width: 15em,
           stroke: luma(230),
           [```txt
-medium
+medium 
+reject 
+extra large
           ```]
         )
     )
@@ -856,7 +1039,7 @@ LOOP
           width: 18em,
           [```txt
 : somatorio 0 swap 1 do i + loop ;
-11 somatorio .
+100 somatorio .
           ```],
         ),
         block(
@@ -866,7 +1049,7 @@ LOOP
           width: 15em,
           stroke: luma(230),
           [```txt
-55
+4950
           ```]
         )
     )
@@ -1040,37 +1223,6 @@ no way
           stroke: luma(230),
           width: 18em,
           [```txt
-: maior2 2dup > if drop else swap drop then ;
-: maior3 maior2 maior2 ;
-: maiorN depth 1 do maior2 loop ;
-2 11 3 4 45 8 19 maiorN .
-          ```],
-        ),
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          width: 15em,
-          stroke: luma(230),
-          [```txt
-45
-          ```]
-        )
-    )
-)
-
-#figure(
-    grid(
-        columns: 2, 
-        rows: 1,    
-        gutter: 2mm, 
-        block(
-          fill: rgb("#fbfbfb"),
-          inset: 8pt,
-          radius: 4pt,
-          stroke: luma(230),
-          width: 18em,
-          [```txt
 : RECTANGLE 25 0 DO I 5 MOD 0 = IF  CR  THEN ." *" LOOP ;
 RECTANGLE
           ```],
@@ -1224,12 +1376,8 @@ CHAR A DUP .
           stroke: luma(230),
           width: 18em,
           [```txt
-variable x
-5 x !
-x @ .
-variable y
-4 y !
-y @ .
+variable x 5 x ! x @ .
+variable y 4 y ! y @ .
           ```],
         ),
         block(
@@ -1240,6 +1388,40 @@ y @ .
           stroke: luma(230),
           [```txt
 54
+          ```]
+        )
+    )
+)
+
+#figure(
+    grid(
+        columns: 2, 
+        rows: 1,    
+        gutter: 2mm, 
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          stroke: luma(230),
+          width: 18em,
+          [```txt
+: A 1 2 + ;
+: B 3 0 do dup A + loop ;
+: C B 3 0 do . 32 EMIT loop cr ;
+3 C  4 C 10 B 10 C 2 A 100 C
+          ```],
+        ),
+        block(
+          fill: rgb("#fbfbfb"),
+          inset: 8pt,
+          radius: 4pt,
+          width: 15em,
+          stroke: luma(230),
+          [```txt
+12 9 6
+13 10 7
+19 16 13
+109 106 103
           ```]
         )
     )

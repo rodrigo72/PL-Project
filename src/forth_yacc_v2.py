@@ -10,7 +10,6 @@ STACK_SIZE = 20
 GP = 1
 VARIABLES_GP = 2
 MAX_VARIABLES = 10
-DUP2_GP = 3
 
 # VM : https://ewvm.epl.di.uminho.pt/
 
@@ -26,8 +25,7 @@ def p_All(p):
     start = [
         'ALLOC 2',
         'ALLOC ' + str(STACK_SIZE + 1),
-        'ALLOC ' + str(MAX_VARIABLES),
-        'ALLOC 2\n',
+        'ALLOC ' + str(MAX_VARIABLES) + '\n',
         'START',
         '\tPUSHG ' + str(GP) + ' PUSHI 0 STORE 0',
         "\tPUSHG 0 PUSHI 0 STORE 0",  #init loop parameters
@@ -58,6 +56,7 @@ def p_Element(p):
     Element : WordDefinition
             | Variable
             | Char
+            | Key
             | String
             | Arithmetic
             | Comparison
@@ -90,6 +89,13 @@ def p_String(p):
         pass
     
 
+def p_Key(p):
+    """
+    Key : KEY
+    """
+    p[0] = ["\tREAD", "\tCHRCODE"]
+    
+
 def p_Word(p):
     """
     Word : WORD
@@ -98,12 +104,14 @@ def p_Word(p):
     p1_to_lower = p[1].lower()
     if p1_to_lower in parser.reserved_words:
         if p1_to_lower == "spaces":
-            p[0] = ["\tPUSHA SPACES CALL", "\tPOP 1"]
             parser.auxiliary_labels["spaces"] = (
                 True, parser.auxiliary_labels["spaces"][1]
             )
-        else:
-            p[0] = parser.reserved_words[p1_to_lower]
+        elif p1_to_lower == "2dup":
+            parser.auxiliary_labels["2dup"] = (
+                True, parser.auxiliary_labels["2dup"][1]
+            )
+        p[0] = parser.reserved_words[p1_to_lower]
     else:
         label = parser.word_to_label.get(p1_to_lower, None)
         if label and label in parser.words:
@@ -231,6 +239,7 @@ def p_BodyElement(p):
     BodyElement : Integer
                 | Char
                 | String
+                | Key
                 | Arithmetic
                 | Comparison
                 | Float
@@ -303,7 +312,7 @@ def p_ForLoop(p):
     for_loop += ['\tJUMP ' + for_loop_label]
     
     restore = [
-        '\tPUSHG 0'
+        '\tPUSHG 0',
         '\tPUSHA MYPOP CALL',
         '\tSTORE 0',
         
@@ -358,7 +367,7 @@ def p_IfStatement(p):
     else:
         endif = next_endif_label()
         label = next_if_statement_label()
-        p[0] = ['\tJZ ' + label] + p[2] + ['\tJUMP ' + endif, label + ':'] + p[4] + ['\tJUMP ' + endif, endif + ':']
+        p[0] = ['\tJZ ' + label] + p[2] + ['\tJUMP ' + endif, label + ':'] + p[4] + [endif + ':']
 
 
 def p_ISBody(p):
@@ -461,46 +470,19 @@ parser = yacc.yacc()
 parser.exito = True
 parser.spaces_idx = 0
 parser.reserved_words = {
-    "." : [
-        "\tWRITEI"
-    ],
-    "i" : [
-        "<<I>>"
-    ],
-    "swap" : [
-        "\tSWAP"
-    ],
-    "cr" : [
-        "\tWRITELN"
-    ],
-    "emit" : [
-        "\tWRITECHR",
-    ],
-    "key": [
-        "\tREAD",
-        "\tCHRCODE",
-    ],
-    "dup": [
-        "\tDUP 1"
-    ],
-    "2dup": [
-        "\tPUSHG " + str(DUP2_GP) + " SWAP STORE 0",
-        "\tPUSHG " + str(DUP2_GP) + " SWAP STORE 1",
-        "\tPUSHG " + str(DUP2_GP) + " LOAD 0",
-        "\tPUSHG " + str(DUP2_GP) + " LOAD 1",
-        "\tPUSHG " + str(DUP2_GP) + " LOAD 0",
-        "\tPUSHG " + str(DUP2_GP) + " LOAD 1",
-    ],
-    "drop": [
-        "\tPOP 1"
-    ],
+    "." : ["\tWRITEI"],
+    "i" : ["<<I>>"],
+    "swap" : ["\tSWAP"],
+    "cr" : ["\tWRITELN"],
+    "emit" : ["\tWRITECHR"],
+    "dup": ["\tDUP 1"],
+    "2dup": ["\tPUSHA TWODUP CALL"],
+    "drop": ["\tPOP 1"],
     "spaces": [
         "\tPUSHA SPACES CALL",
-        "\nPOP 1"
+        "\tPOP 1"
     ],
-    "depth": [
-        # depth, SP - FP
-    ]
+    # "depth": []
 }
 
 parser.words = {}
@@ -526,6 +508,12 @@ parser.auxiliary_labels = {
         "\t\tJZ SPACES2",
         "\tPOP 1",
         "\tRETURN",
+    ]),
+    "2dup": (False, [
+        "TWODUP:",
+        "\tPUSHFP LOAD -2",
+        "\tPUSHFP LOAD -1",
+        "\tRETURN",  
     ])
 }
 
@@ -604,6 +592,7 @@ def replace_words(code):
     
     return code
 
+
 def main():
     
     if len(sys.argv) < 2:
@@ -619,7 +608,7 @@ def main():
     
     result_str = replace_words(result_str)
     
-    for key, value in parser.auxiliary_labels.items():
+    for value in parser.auxiliary_labels.values():
         if value[0]:
             result_str += '\n' + '\n'.join(value[1])
     

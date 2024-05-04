@@ -33,8 +33,8 @@ tests:
         DUP 30 < IF  ." extra large " ELSE
             ." error "
         THEN THEN THEN THEN THEN DROP ;
-      23 EGGSIZE
-      2 EGGSIZE
+      23 EGGSIZE CR
+      2 EGGSIZE CR
       28 EGGSIZE
     output: |
       medium 
@@ -212,4 +212,28 @@ tests:
       4 y !
       y @ .
     output: 54
+    test: true
+
+
+  - name: multiple words 1
+    input: |
+      : A 1 2 + ;
+      : B 3 0 do dup A + loop ;
+      : C B 3 0 do . 32 EMIT loop cr ;
+      3 C  4 C 10 B 10 C 2 A 100 C
+    output: |
+      12 9 6
+      13 10 7
+      19 16 13
+      109 106 103
+
+
+  - name: redefining words 1
+    input: |
+      : A 1 2 + ;
+      A .
+      32 EMIT
+      : A 3 4 + ;
+      A .
+    output: "3 7"
     test: true
